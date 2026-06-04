@@ -1,0 +1,25 @@
+name: schematic_topology
+description: >-
+  Generic Flutter graph/topology editor — interactive canvas (pan/zoom,
+  drag-to-connect, rubber-band selection), bezier connection painter with
+  pluggable edge styling, 90° routing geometry, and node-card connection-point
+  detection. Domain-agnostic via SchematicNode/SchematicEdge interfaces and an
+  injected EdgeStyleResolver.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

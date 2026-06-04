@@ -1,0 +1,24 @@
+name: schematic_wire
+description: >-
+  Generic schematic wiring-diagram renderer for paginated diagrams. Provides
+  terminal block painting, wire corridor routing, low-level wire path/stroke
+  primitives, pan/zoom interaction, and PDF export. Domain-agnostic —
+  app-specific block types register via the customBlockPainters extension point.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,23 @@
+name: schematic_cable
+description: >-
+  Generic Flutter cable rendering — twisted-pair / power / multicore cable
+  cross-sections and cable-to-terminal breakout schematics. Domain-agnostic;
+  build cables from WireSpec/CableSpec or the provided factories.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
