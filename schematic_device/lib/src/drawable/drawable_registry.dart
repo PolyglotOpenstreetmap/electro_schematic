@@ -23,4 +23,5 @@ void registerBuiltinDrawableNodes() {
   DrawableNodeFactory.register('terminalAnchor', DrawTerminalAnchor.fromJson);
   DrawableNodeFactory.register('group', DrawGroup.fromJson);
   DrawableNodeFactory.register('repeat', DrawRepeat.fromJson);
+  DrawableNodeFactory.register('deviceRef', DrawDeviceRef.fromJson);
 }

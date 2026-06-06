@@ -5,10 +5,12 @@
 
 import 'package:flutter/material.dart';
 
+import '../models/drawing_level.dart';
 import 'color_utils.dart';
 import 'condition.dart';
 import 'terminal_color_binding.dart';
 
+export '../models/drawing_level.dart';
 export 'color_utils.dart';
 export 'condition.dart';
 export 'terminal_color_binding.dart';

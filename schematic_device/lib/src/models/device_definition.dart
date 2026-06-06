@@ -5,7 +5,10 @@
 import 'package:flutter/material.dart';
 
 import '../drawable/drawable_node.dart';
+import 'drawing_level.dart';
 import 'parameter_def.dart';
+
+export 'drawing_level.dart';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -33,16 +36,6 @@ enum ConnectorPlacement {
 
   static ConnectorPlacement fromJson(String name) =>
       ConnectorPlacement.values.byName(name);
-}
-
-/// Which diagram level to render at.
-enum DrawingLevel {
-  wire,
-  cable,
-  topology;
-
-  static DrawingLevel fromJson(String name) =>
-      DrawingLevel.values.byName(name);
 }
 
 // ─── TerminalDef ─────────────────────────────────────────────────────────────
@@ -225,23 +218,27 @@ class LevelAppearance {
 class DeviceAppearance {
   final LevelAppearance? wire;
   final LevelAppearance? cable;
+  final LevelAppearance? symbol;
   final LevelAppearance? topology;
 
   const DeviceAppearance({
     this.wire,
     this.cable,
+    this.symbol,
     this.topology,
   });
 
   LevelAppearance? forLevel(DrawingLevel level) => switch (level) {
         DrawingLevel.wire => wire,
         DrawingLevel.cable => cable,
+        DrawingLevel.symbol => symbol,
         DrawingLevel.topology => topology,
       };
 
   Map<String, dynamic> toJson() => {
         if (wire != null) 'wire': wire!.toJson(),
         if (cable != null) 'cable': cable!.toJson(),
+        if (symbol != null) 'symbol': symbol!.toJson(),
         if (topology != null) 'topology': topology!.toJson(),
       };
 
@@ -252,6 +249,9 @@ class DeviceAppearance {
           : null,
       cable: json['cable'] != null
           ? LevelAppearance.fromJson(json['cable'] as Map<String, dynamic>)
+          : null,
+      symbol: json['symbol'] != null
+          ? LevelAppearance.fromJson(json['symbol'] as Map<String, dynamic>)
           : null,
       topology: json['topology'] != null
           ? LevelAppearance.fromJson(json['topology'] as Map<String, dynamic>)
@@ -265,10 +265,11 @@ class DeviceAppearance {
       other is DeviceAppearance &&
           wire == other.wire &&
           cable == other.cable &&
+          symbol == other.symbol &&
           topology == other.topology;
 
   @override
-  int get hashCode => Object.hash(wire, cable, topology);
+  int get hashCode => Object.hash(wire, cable, symbol, topology);
 }
 
 // ─── DeviceDefinition ────────────────────────────────────────────────────────

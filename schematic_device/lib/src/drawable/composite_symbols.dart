@@ -231,6 +231,98 @@ class DrawGroup extends DrawableNode {
       Object.hash(id, offset, scale, showIf, Object.hashAll(children));
 }
 
+// ─── DrawDeviceRef ────────────────────────────────────────────────────────────
+
+/// A drawable node that references another device by its [typeKey] and renders
+/// it inline, translated/scaled, at the specified (or inherited) drawing level.
+///
+/// The renderer resolves [typeKey] through [RenderContext.deviceResolver].
+/// If the resolver is null or the key is not found, this node is silently
+/// skipped.  Recursion is bounded by [RenderContext.maxDepth].
+///
+/// This is the template-authoring path for composite devices.  The
+/// instance-tree path uses [DeviceInstance.children] instead.
+class DrawDeviceRef extends DrawableNode {
+  /// Type key of the child device to look up and render.
+  final String typeKey;
+
+  /// Drawing level at which to render the child.  When null, inherits the
+  /// current level from the parent render call.
+  final DrawingLevel? level;
+
+  /// Offset from the current canvas origin at which to draw the child.
+  final Offset offset;
+
+  /// Uniform scale applied to the child before drawing.
+  final double scale;
+
+  /// Parameter overrides passed to the child device instance.  Values may be
+  /// literal values or `"\${parentParam}"` template strings that are resolved
+  /// against the parent's resolved parameter map.
+  final Map<String, dynamic> paramOverrides;
+
+  const DrawDeviceRef({
+    super.id,
+    super.showIf,
+    required this.typeKey,
+    this.level,
+    this.offset = Offset.zero,
+    this.scale = 1.0,
+    this.paramOverrides = const {},
+  });
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'deviceRef',
+        if (id != null) 'id': id,
+        if (showIf != null) 'showIf': showIf!.toJson(),
+        'typeKey': typeKey,
+        if (level != null) 'level': level!.name,
+        'offset': _offsetToJson(offset),
+        'scale': scale,
+        if (paramOverrides.isNotEmpty) 'paramOverrides': paramOverrides,
+      };
+
+  factory DrawDeviceRef.fromJson(Map<String, dynamic> json) {
+    return DrawDeviceRef(
+      id: json['id'] as String?,
+      showIf: _conditionFromJson(json['showIf']),
+      typeKey: json['typeKey'] as String,
+      level: json['level'] != null
+          ? DrawingLevel.fromJson(json['level'] as String)
+          : null,
+      offset: json['offset'] != null
+          ? _offsetFromJson(json['offset'] as Map<String, dynamic>)
+          : Offset.zero,
+      scale: (json['scale'] as num? ?? 1.0).toDouble(),
+      paramOverrides: Map<String, dynamic>.from(
+          json['paramOverrides'] as Map? ?? const {}),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DrawDeviceRef &&
+          id == other.id &&
+          typeKey == other.typeKey &&
+          level == other.level &&
+          offset == other.offset &&
+          scale == other.scale &&
+          _mapEquals(paramOverrides, other.paramOverrides);
+
+  bool _mapEquals(Map<String, dynamic> a, Map<String, dynamic> b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (a[key] != b[key]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, typeKey, level, offset, scale);
+}
+
 // ─── DrawRepeat ───────────────────────────────────────────────────────────────
 
 enum RepeatAxis { horizontal, vertical }

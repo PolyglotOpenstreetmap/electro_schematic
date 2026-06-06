@@ -35,6 +35,7 @@ abstract final class NodeBoundsHelper {
       DrawGroup() => _groupBounds(node, definition),
       DrawRepeat() => null, // complex
       DrawPath() => null, // SVG too complex
+      DrawDeviceRef() => null, // bounds depend on external registry
     };
   }
 

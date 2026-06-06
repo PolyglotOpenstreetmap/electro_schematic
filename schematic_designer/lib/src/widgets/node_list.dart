@@ -93,6 +93,7 @@ class NodeList extends StatelessWidget {
       DrawTerminalAnchor() => Icons.electric_bolt,
       DrawGroup() => Icons.folder,
       DrawRepeat() => Icons.repeat,
+      DrawDeviceRef() => Icons.device_hub,
     };
   }
 
@@ -109,6 +110,7 @@ class NodeList extends StatelessWidget {
       DrawTerminalAnchor() => 'Terminal',
       DrawGroup() => 'Group',
       DrawRepeat() => 'Repeat',
+      DrawDeviceRef() => 'DeviceRef[${node.typeKey}]',
     };
     final idStr = node.id != null ? ' [${node.id}]' : '';
     return '$typeName$idStr';

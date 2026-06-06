@@ -1,19 +1,34 @@
 // example/lib/main.dart
 //
-// Example app — renders a RotatingMotorDevice, ThreePhaseMotorSymbol, and
-// SimpleTerminalStripDevice side by side using DeviceRenderer.
+// Example app — device gallery showing atomic and composite devices at
+// wire and symbol levels using DeviceRenderer.
 
 import 'package:flutter/material.dart';
 import 'package:schematic_device/schematic_device.dart';
 
+import 'devices/motor_with_sensors_device.dart';
 import 'devices/rotating_motor_device.dart';
+import 'devices/sensor_device.dart';
 import 'devices/simple_terminal_strip_device.dart';
 import 'devices/three_phase_motor_symbol.dart';
 
 void main() {
-  // Register all built-in drawable node serializers.
   SchematicDevicePackage.initialize();
   runApp(const ExampleApp());
+}
+
+/// Builds the device registry used by DrawDeviceRef resolution.
+Map<String, DeviceDefinition> _buildRegistry() {
+  final motorDef = RotatingMotorDevice.build();
+  final sensorDef = SensorDevice.build();
+  final motorSymbolDef = ThreePhaseMotorSymbol.build();
+  final motorWithSensorsDef = MotorWithSensorsDevice.build();
+  return {
+    motorDef.typeKey: motorDef,
+    sensorDef.typeKey: sensorDef,
+    motorSymbolDef.typeKey: motorSymbolDef,
+    motorWithSensorsDef.typeKey: motorWithSensorsDef,
+  };
 }
 
 class ExampleApp extends StatelessWidget {
@@ -34,9 +49,12 @@ class DeviceGalleryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ── Motor instance — connected terminals, voltage=400 (star)
+    final registry = _buildRegistry();
+    DeviceDefinition? resolver(String key) => registry[key];
+
+    // ── Atomic: star motor (wire level, 400 V)
     final motorDef = RotatingMotorDevice.build();
-    final motorInstance = DeviceInstance(
+    final motorStar = DeviceInstance(
       definition: motorDef,
       position: const Offset(40, 60),
       paramValues: const {'motorRef': 'IVR3210', 'voltage': 400},
@@ -47,7 +65,7 @@ class DeviceGalleryPage extends StatelessWidget {
       },
     );
 
-    // ── Motor instance — delta wiring (voltage < 300)
+    // ── Atomic: delta motor (wire level, 230 V)
     final motorDelta = DeviceInstance(
       definition: motorDef,
       position: const Offset(160, 60),
@@ -59,32 +77,94 @@ class DeviceGalleryPage extends StatelessWidget {
       },
     );
 
-    // ── 3-phase motor schematic symbol
-    final motorSymbolDef = ThreePhaseMotorSymbol.build();
-    final motorSymbolInstance = DeviceInstance(
-      definition: motorSymbolDef,
-      position: const Offset(290, 20),
-      paramValues: const {'ref': 'M1'},
-      terminalConnected: const {
-        ThreePhaseMotorSymbol.u: true,
-        ThreePhaseMotorSymbol.v: true,
-        ThreePhaseMotorSymbol.w: true,
+    // ── Atomic: motor at symbol level (star, 400 V)
+    final motorSymStar = DeviceInstance(
+      definition: motorDef,
+      position: Offset.zero,
+      paramValues: const {'motorRef': 'IVR3210', 'voltage': 400},
+    );
+
+    // ── Atomic: motor at symbol level (delta, 230 V)
+    final motorSymDelta = DeviceInstance(
+      definition: motorDef,
+      position: Offset.zero,
+      paramValues: const {'motorRef': 'IVR3210-D', 'voltage': 230},
+    );
+
+    // ── Atomic: capacitor motor at symbol level
+    final motorSymCap = DeviceInstance(
+      definition: motorDef,
+      position: Offset.zero,
+      paramValues: const {'motorRef': 'IV21-something', 'voltage': 230},
+    );
+
+    // ── Atomic: sensor (wire level)
+    final sensorDef = SensorDevice.build();
+    final sensorWire = DeviceInstance(
+      definition: sensorDef,
+      position: Offset.zero,
+      paramValues: const {'sensorRef': 'DET-01'},
+    );
+
+    // ── Atomic: sensor (symbol level)
+    final sensorSym = DeviceInstance(
+      definition: sensorDef,
+      position: Offset.zero,
+      paramValues: const {'sensorRef': 'DET-01'},
+    );
+
+    // ── Composite: motor + 2 sensors (wire level)
+    final mwsDef = MotorWithSensorsDevice.build();
+    final mwsWire = DeviceInstance(
+      definition: mwsDef,
+      position: Offset.zero,
+      paramValues: const {
+        'motorRef': 'IVR3210',
+        'voltage': 400,
+        'sensorCount': 2,
+        'hasBrake': false,
       },
     );
 
-    // ── Terminal strip instance — 6 terminals
+    // ── Composite: motor + 2 sensors (symbol level)
+    final mwsSym = DeviceInstance(
+      definition: mwsDef,
+      position: Offset.zero,
+      paramValues: const {
+        'motorRef': 'IVR3210-D',
+        'voltage': 230,
+        'sensorCount': 2,
+        'hasBrake': false,
+      },
+    );
+
+    // ── Old-style motor symbol device (kept for backwards compat display)
+    final motorSymbolDef = ThreePhaseMotorSymbol.build();
+    final motorSymbolOld = DeviceInstance(
+      definition: motorSymbolDef,
+      position: Offset.zero,
+      paramValues: const {'ref': 'M1'},
+    );
+
+    // ── Terminal strip
     final stripInstance = SimpleTerminalStripDevice.createInstance(
       count: 6,
       label: 'TB1',
-      position: const Offset(380, 40),
+      position: Offset.zero,
     );
 
-    final instances = [motorInstance, motorDelta, motorSymbolInstance, stripInstance];
-    final labels = [
-      'Star motor (400 V)',
-      'Delta motor (230 V)',
-      'Motor symbol (IEC)',
-      'Terminal strip (6T)',
+    final items = <({DeviceInstance inst, String label, DrawingLevel level})>[
+      (inst: motorStar, label: 'Star motor 400V\n(wire)', level: DrawingLevel.wire),
+      (inst: motorDelta, label: 'Delta motor 230V\n(wire)', level: DrawingLevel.wire),
+      (inst: motorSymStar, label: 'Motor symbol\nstar (symbol)', level: DrawingLevel.symbol),
+      (inst: motorSymDelta, label: 'Motor symbol\ndelta (symbol)', level: DrawingLevel.symbol),
+      (inst: motorSymCap, label: 'Capacitor motor\n(symbol)', level: DrawingLevel.symbol),
+      (inst: sensorWire, label: 'Sensor\n(wire)', level: DrawingLevel.wire),
+      (inst: sensorSym, label: 'Sensor\n(symbol)', level: DrawingLevel.symbol),
+      (inst: mwsWire, label: 'Motor+2 sensors\n(wire)', level: DrawingLevel.wire),
+      (inst: mwsSym, label: 'Motor+2 sensors\n(symbol)', level: DrawingLevel.symbol),
+      (inst: motorSymbolOld, label: 'Legacy motor symbol\n(wire)', level: DrawingLevel.wire),
+      (inst: stripInstance, label: 'Terminal strip 6T\n(wire)', level: DrawingLevel.wire),
     ];
 
     return Scaffold(
@@ -95,19 +175,25 @@ class DeviceGalleryPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(12),
             child: Text(
-              'Data-driven device rendering — no hardcoded draw methods.',
+              'Data-driven device rendering — atomic and composite, wire and symbol levels.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
           Expanded(
-            child: Row(
-              children: [
-                for (var i = 0; i < instances.length; i++)
-                  _DeviceCard(
-                    instance: instances[i],
-                    label: labels[i],
-                  ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final item in items)
+                    _DeviceCard(
+                      instance: item.inst,
+                      label: item.label,
+                      level: item.level,
+                      resolver: resolver,
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -119,32 +205,36 @@ class DeviceGalleryPage extends StatelessWidget {
 class _DeviceCard extends StatelessWidget {
   final DeviceInstance instance;
   final String label;
+  final DrawingLevel level;
+  final DeviceDefinition? Function(String)? resolver;
 
-  const _DeviceCard({required this.instance, required this.label});
+  const _DeviceCard({
+    required this.instance,
+    required this.label,
+    this.level = DrawingLevel.wire,
+    this.resolver,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final appearance =
-        instance.definition.appearance.forLevel(DrawingLevel.wire);
+    final appearance = instance.definition.appearance.forLevel(level);
     final size = appearance?.size ?? const Size(100, 100);
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            instance.definition.typeKey,
+            '${instance.definition.typeKey} · ${level.name}',
             style: Theme.of(context)
                 .textTheme
                 .labelSmall
                 ?.copyWith(color: Colors.blue),
           ),
-          Text(label,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 8),
-          // Render the device at its definition size + a small margin
           Container(
             width: size.width + 20,
             height: size.height + 20,
@@ -155,7 +245,11 @@ class _DeviceCard extends StatelessWidget {
             ),
             child: CustomPaint(
               size: Size(size.width + 20, size.height + 20),
-              painter: _DevicePainter(instance: instance),
+              painter: _DevicePainter(
+                instance: instance,
+                level: level,
+                resolver: resolver,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -170,28 +264,39 @@ class _DeviceCard extends StatelessWidget {
 
   String _paramSummary(DeviceInstance inst) {
     final params = {...inst.definition.defaultParams, ...inst.paramValues};
-    return params.entries.map((e) => '${e.key}: ${e.value}').join('  ·  ');
+    return params.entries
+        .map((e) => '${e.key}: ${e.value}')
+        .join('  ·  ');
   }
 }
 
 class _DevicePainter extends CustomPainter {
   final DeviceInstance instance;
+  final DrawingLevel level;
+  final DeviceDefinition? Function(String)? resolver;
   static const _renderer = DeviceRenderer();
 
-  const _DevicePainter({required this.instance});
+  const _DevicePainter({
+    required this.instance,
+    required this.level,
+    this.resolver,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Small margin offset so the device doesn't touch the border
     canvas.translate(10, 10);
     _renderer.render(
       canvas,
       instance,
-      level: DrawingLevel.wire,
-      context: const RenderContext(gridVoltage: 400),
+      level: level,
+      context: RenderContext(
+        gridVoltage: 400,
+        deviceResolver: resolver,
+      ),
     );
   }
 
   @override
-  bool shouldRepaint(_DevicePainter old) => instance != old.instance;
+  bool shouldRepaint(_DevicePainter old) =>
+      instance != old.instance || level != old.level;
 }

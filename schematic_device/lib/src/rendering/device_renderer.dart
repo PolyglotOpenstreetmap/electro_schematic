@@ -26,6 +26,15 @@ class DeviceRenderer {
 
   /// Renders [instance] at its [DeviceInstance.position] using the appearance
   /// for [level].
+  ///
+  /// Two composition paths are supported:
+  /// - **Template path**: [DrawDeviceRef] nodes in the appearance reference
+  ///   child devices by typeKey and are resolved through
+  ///   [RenderContext.deviceResolver].
+  /// - **Instance-tree path**: [DeviceInstance.children] are recursed after
+  ///   the appearance drawables.
+  ///
+  /// Recursion is bounded by [RenderContext.maxDepth] (default 8).
   void render(
     Canvas canvas,
     DeviceInstance instance, {
@@ -33,7 +42,9 @@ class DeviceRenderer {
     RenderContext context = RenderContext.empty,
   }) {
     final appearance = instance.definition.appearance.forLevel(level);
-    if (appearance == null) return;
+
+    // Nothing to do if there is no appearance for this level and no children.
+    if (appearance == null && instance.children.isEmpty) return;
 
     final origin = instance.position;
     final params = _resolveParams(instance);
@@ -41,8 +52,27 @@ class DeviceRenderer {
     canvas.save();
     canvas.translate(origin.dx, origin.dy);
 
-    for (final node in appearance.drawables) {
-      _renderNode(canvas, node, params, instance, context);
+    // Template-path: render drawables declared in the LevelAppearance.
+    if (appearance != null) {
+      for (final node in appearance.drawables) {
+        _renderNode(canvas, node, params, instance, context, level);
+      }
+    }
+
+    // Instance-tree path: recurse into explicitly placed children.
+    if (context.depth < context.maxDepth) {
+      for (final placement in instance.children) {
+        canvas.save();
+        canvas.translate(placement.offset.dx, placement.offset.dy);
+        if (placement.scale != 1.0) canvas.scale(placement.scale);
+        render(
+          canvas,
+          placement.child,
+          level: placement.levelOverride ?? level,
+          context: context.withDepth(context.depth + 1),
+        );
+        canvas.restore();
+      }
     }
 
     canvas.restore();
@@ -63,6 +93,7 @@ class DeviceRenderer {
     Map<String, dynamic> params,
     DeviceInstance instance,
     RenderContext ctx,
+    DrawingLevel level,
   ) {
     if (node.showIf != null && !node.showIf!.evaluate(params, ctx)) return;
 
@@ -86,9 +117,11 @@ class DeviceRenderer {
       case DrawTerminalAnchor():
         _renderTerminalAnchor(canvas, node, instance);
       case DrawGroup():
-        _renderGroup(canvas, node, params, instance, ctx);
+        _renderGroup(canvas, node, params, instance, ctx, level);
       case DrawRepeat():
-        _renderRepeat(canvas, node, params, instance, ctx);
+        _renderRepeat(canvas, node, params, instance, ctx, level);
+      case DrawDeviceRef():
+        _renderDeviceRef(canvas, node, params, instance, ctx, level);
     }
   }
 
@@ -330,6 +363,7 @@ class DeviceRenderer {
     Map<String, dynamic> params,
     DeviceInstance instance,
     RenderContext ctx,
+    DrawingLevel level,
   ) {
     canvas.save();
     if (node.offset != null) {
@@ -339,7 +373,7 @@ class DeviceRenderer {
       canvas.scale(node.scale);
     }
     for (final child in node.children) {
-      _renderNode(canvas, child, params, instance, ctx);
+      _renderNode(canvas, child, params, instance, ctx, level);
     }
     canvas.restore();
   }
@@ -350,6 +384,7 @@ class DeviceRenderer {
     Map<String, dynamic> params,
     DeviceInstance instance,
     RenderContext ctx,
+    DrawingLevel level,
   ) {
     final resolvedCount = _resolveCount(node.count, params);
     if (resolvedCount <= 0) return;
@@ -361,12 +396,66 @@ class DeviceRenderer {
 
       canvas.save();
       canvas.translate(dx, dy);
-      _renderNode(canvas, node.templateChild, iterParams, instance, ctx);
+      _renderNode(canvas, node.templateChild, iterParams, instance, ctx, level);
       canvas.restore();
     }
   }
 
+  // ─── Device-ref renderer (template-path composition) ─────────────────────
+
+  void _renderDeviceRef(
+    Canvas canvas,
+    DrawDeviceRef node,
+    Map<String, dynamic> params,
+    DeviceInstance parent,
+    RenderContext ctx,
+    DrawingLevel currentLevel,
+  ) {
+    if (ctx.depth >= ctx.maxDepth) return;
+    final resolver = ctx.deviceResolver;
+    if (resolver == null) return;
+
+    final childDef = resolver(node.typeKey);
+    if (childDef == null) return;
+
+    final childLevel = node.level ?? currentLevel;
+
+    // Merge params: child defaults ← paramOverrides (with parent-param resolution).
+    final childParams = {
+      ...childDef.defaultParams,
+      for (final e in node.paramOverrides.entries)
+        e.key: _resolveParamValue(e.value, params),
+    };
+
+    final childInstance = DeviceInstance(
+      definition: childDef,
+      position: Offset.zero,
+      paramValues: childParams,
+    );
+
+    final childCtx = ctx.withDepth(ctx.depth + 1);
+
+    canvas.save();
+    canvas.translate(node.offset.dx, node.offset.dy);
+    if (node.scale != 1.0) canvas.scale(node.scale);
+    render(canvas, childInstance, level: childLevel, context: childCtx);
+    canvas.restore();
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  /// Resolves a paramOverride value, expanding `"\${key}"` templates against
+  /// the parent's resolved parameter map.
+  dynamic _resolveParamValue(dynamic value, Map<String, dynamic> parentParams) {
+    if (value is String) {
+      final match = RegExp(r'^\$\{(\w+)\}$').firstMatch(value);
+      if (match != null) {
+        final key = match.group(1)!;
+        return parentParams[key] ?? value;
+      }
+    }
+    return value;
+  }
 
   Color _resolveTerminalColor(
       TerminalColorBinding binding, DeviceInstance instance) {

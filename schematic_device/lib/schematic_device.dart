@@ -9,6 +9,7 @@
 // ── Models ────────────────────────────────────────────────────────────────────
 export 'src/models/device_definition.dart';
 export 'src/models/device_instance.dart';
+export 'src/models/drawing_level.dart';
 export 'src/models/parameter_def.dart';
 
 // ── Drawable DSL ──────────────────────────────────────────────────────────────

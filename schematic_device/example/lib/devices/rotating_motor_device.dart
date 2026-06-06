@@ -261,6 +261,132 @@ abstract final class RotatingMotorDevice {
             ),
           ],
         ),
+        symbol: LevelAppearance(
+          size: const Size(60, 80),
+          drawables: [
+            // ── Phase leads entering circle from above ─────────────────────
+            const DrawLine(
+              id: 'sym_lead_u',
+              start: Offset(14, 0),
+              end: Offset(14, 38),
+              color: _black87,
+              strokeWidth: 1.5,
+            ),
+            const DrawLine(
+              id: 'sym_lead_v',
+              start: Offset(30, 0),
+              end: Offset(30, 30),
+              color: _black87,
+              strokeWidth: 1.5,
+            ),
+            const DrawLine(
+              id: 'sym_lead_w',
+              start: Offset(46, 0),
+              end: Offset(46, 38),
+              color: _black87,
+              strokeWidth: 1.5,
+            ),
+
+            // ── Motor circle body ──────────────────────────────────────────
+            const DrawCircle(
+              id: 'sym_body',
+              center: Offset(30, 50),
+              radius: 20,
+              fillColor: Color(0xFFFFFFFF),
+              strokeColor: _black87,
+              strokeWidth: 1.5,
+            ),
+
+            // ── M label ───────────────────────────────────────────────────
+            const DrawText(
+              id: 'sym_label_m',
+              text: 'M',
+              position: Offset(30, 46),
+              anchor: TextAnchor.center,
+              fontSize: 14,
+              bold: true,
+              color: _black87,
+            ),
+
+            // ── 3~ label (non-capacitor motors) ───────────────────────────
+            DrawText(
+              id: 'sym_label_3ph',
+              text: '3~',
+              position: const Offset(30, 57),
+              anchor: TextAnchor.center,
+              fontSize: 9,
+              color: _black87,
+              showIf: const NotCondition(ParamStartsWithCondition('motorRef', 'IV21')),
+            ),
+
+            // ── ~ label (single-phase capacitor motor) ────────────────────
+            DrawText(
+              id: 'sym_label_1ph',
+              text: '~',
+              position: const Offset(30, 57),
+              anchor: TextAnchor.center,
+              fontSize: 9,
+              color: _black87,
+              showIf: const ParamStartsWithCondition('motorRef', 'IV21'),
+            ),
+
+            // ── Reference label below circle ──────────────────────────────
+            const DrawText(
+              id: 'sym_motor_ref',
+              text: r'${motorRef}',
+              position: Offset(30, 72),
+              anchor: TextAnchor.bottomCenter,
+              fontSize: 7,
+              color: _black87,
+            ),
+
+            // ── Star indicator (voltage ≥ 300 V) ──────────────────────────
+            DrawGroup(
+              id: 'sym_star_ind',
+              showIf: const NotCondition(ParamLessThanCondition('voltage', 300)),
+              children: const [
+                DrawText(
+                  text: 'Y',
+                  position: Offset(54, 44),
+                  anchor: TextAnchor.center,
+                  fontSize: 8,
+                  bold: true,
+                  color: _starColor,
+                ),
+              ],
+            ),
+
+            // ── Delta indicator (voltage < 300 V) ─────────────────────────
+            DrawGroup(
+              id: 'sym_delta_ind',
+              showIf: const ParamLessThanCondition('voltage', 300),
+              children: const [
+                DrawText(
+                  text: 'D',
+                  position: Offset(54, 44),
+                  anchor: TextAnchor.center,
+                  fontSize: 8,
+                  bold: true,
+                  color: _deltaColor,
+                ),
+              ],
+            ),
+
+            // ── Capacitor symbol (single-phase motors) ────────────────────
+            DrawGroup(
+              id: 'sym_cap',
+              showIf: const ParamStartsWithCondition('motorRef', 'IV21'),
+              children: [
+                DrawCapacitor(
+                  center: const Offset(30, 29),
+                  horizontal: false,
+                  scale: 0.65,
+                  color: _black87,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
