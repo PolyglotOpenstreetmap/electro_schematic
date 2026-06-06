@@ -77,6 +77,60 @@ class BlockPaintContext {
   final void Function(Canvas, RRect, Paint) drawDashedRRect;
 }
 
+/// Callback type for domain-specific connection routing.
+///
+/// Receives the canvas, connection metadata, already-resolved block/terminal
+/// objects, already-calculated source/dest positions, the corridor vertical
+/// offset, and a context with shared utilities. Return true if the connection
+/// was fully handled (routing + any decorations); false to fall through to
+/// generic orthogonal routing.
+typedef ConnectionPainter = bool Function(
+  Canvas canvas,
+  Connection connection,
+  TerminalBlock sourceBlock,
+  TerminalBlock destBlock,
+  Terminal sourceTerminal,
+  Terminal destTerminal,
+  Offset sourcePos,
+  Offset destPos,
+  double verticalOffset,
+  ConnectionPaintContext ctx,
+);
+
+/// Shared utilities exposed to [ConnectionPainter] callbacks.
+class ConnectionPaintContext {
+  const ConnectionPaintContext._({
+    required this.wireColorSettings,
+    required this.terminalBlocks,
+    required this.connections,
+    required this.bundleYOverrides,
+    required this.powerGrid,
+    required this.overlayGroups,
+    required this.drawText,
+    required this.drawTextCentered,
+    required this.drawOrthogonalWire,
+    required this.getTerminalPosition,
+  });
+
+  final WireColorSettings wireColorSettings;
+  final List<TerminalBlock> terminalBlocks;
+  final List<Connection> connections;
+  final Map<String, double> bundleYOverrides;
+  final PowerGridData? powerGrid;
+  final List<DiagramOverlayGroup> overlayGroups;
+
+  final void Function(Canvas, String, Offset, TextStyle) drawText;
+  final void Function(Canvas, String, Offset, TextStyle) drawTextCentered;
+
+  /// Generic orthogonal wire routing. Signature matches [PaginatedDiagramPainter._drawOrthogonalWire].
+  final void Function(Canvas, Offset, Offset, Paint, double, [double, double?]) drawOrthogonalWire;
+
+  /// Resolves the diagram-space exit point for a terminal on a block.
+  /// Delegates through [PaginatedDiagramPainter._getTerminalPosition],
+  /// which first tries [customTerminalPositionResolver].
+  final Offset? Function(TerminalBlock, Terminal) getTerminalPosition;
+}
+
 /// Painter for rendering a single page of a paginated wiring diagram.
 ///
 /// Handles rendering of terminal blocks, connections, page headers,
@@ -165,6 +219,19 @@ class PaginatedDiagramPainter extends CustomPainter {
   /// [DeviceRenderer]. Checked before [customBlockPainters].
   final Map<String, DeviceDefinition> deviceRegistry;
 
+  /// Optional domain-specific terminal position resolver.
+  ///
+  /// Called first by [_getTerminalPosition]. Return a non-null [Offset] to
+  /// override the generic layout; return null to fall through to built-in logic.
+  final Offset? Function(TerminalBlock, Terminal)? customTerminalPositionResolver;
+
+  /// Optional domain-specific connection painter.
+  ///
+  /// Called after source/dest blocks, terminals, and positions are resolved.
+  /// Return true to consume the connection entirely; false falls through to
+  /// generic orthogonal routing.
+  final ConnectionPainter? customConnectionPainter;
+
   const PaginatedDiagramPainter({
     required this.terminalBlocks,
     required this.connections,
@@ -189,6 +256,8 @@ class PaginatedDiagramPainter extends CustomPainter {
     this.titleBlockFields = const {},
     this.customBlockPainters = const {},
     this.deviceRegistry = const {},
+    this.customTerminalPositionResolver,
+    this.customConnectionPainter,
   });
 
   @override
@@ -899,48 +968,6 @@ class PaginatedDiagramPainter extends CustomPainter {
     return page.viewport.overlaps(group.bounds);
   }
 
-  /// Find the overlay group that contains the motor from a given terminal block.
-  /// Returns null if the block doesn't belong to any overlay group.
-  DiagramOverlayGroup? _findOverlayGroupForBlock(TerminalBlock block) {
-    // Extract motor ID from terminal IDs (e.g., "motor_bell1_s1" → "bell1")
-    for (final terminal in block.allTerminals) {
-      final match = RegExp(r'^motor_(.+?)_').firstMatch(terminal.id);
-      if (match != null) {
-        final motorId = match.group(1)!;
-        for (final group in overlayGroups) {
-          if (group.memberIds.contains(motorId)) {
-            return group;
-          }
-        }
-      }
-    }
-    return null;
-  }
-
-  /// Get the sensor drawing position for an overlay group (inside group box, below members).
-  /// Returns the base position where the first sensor terminal should be drawn.
-  Offset _getGroupSensorBasePosition(DiagramOverlayGroup group) {
-    if (group.contentOrigin == null) {
-      return Offset.zero;
-    }
-
-    // For rotating motors: sensor below the motor row
-    // For linear motors: sensor below the lowest motor in the stack
-    const motorHeight = 60.0;
-    final verticalSpacing = group.isLinear ? 2.0 : 10.0;
-
-    double sensorY;
-    if (group.isLinear) {
-      final totalStackHeight = (motorHeight * group.memberCount) +
-          (verticalSpacing * (group.memberCount - 1));
-      sensorY = group.contentOrigin!.y + totalStackHeight + 5.0;
-    } else {
-      sensorY = group.contentOrigin!.y + motorHeight + 5.0;
-    }
-
-    return Offset(group.contentOrigin!.x, sensorY);
-  }
-
   /// Draw a dashed bounding box with label for an overlay group.
   ///
   /// Used to visually indicate that multiple motors share a single sensor
@@ -1337,6 +1364,22 @@ class PaginatedDiagramPainter extends CustomPainter {
     );
   }
 
+  /// Build a [ConnectionPaintContext] for [ConnectionPainter] callbacks.
+  ConnectionPaintContext _buildConnectionPaintContext() {
+    return ConnectionPaintContext._(
+      wireColorSettings: wireColorSettings,
+      terminalBlocks: terminalBlocks,
+      connections: connections,
+      bundleYOverrides: bundleYOverrides,
+      powerGrid: powerGrid,
+      overlayGroups: overlayGroups,
+      drawText: _drawText,
+      drawTextCentered: _drawTextCentered,
+      drawOrthogonalWire: _drawOrthogonalWire,
+      getTerminalPosition: _getTerminalPosition,
+    );
+  }
+
   @override
   bool shouldRepaint(PaginatedDiagramPainter oldDelegate) {
     return oldDelegate.page != page ||
@@ -1355,12 +1398,4 @@ class PaginatedDiagramPainter extends CustomPainter {
         oldDelegate.channelGroupings != channelGroupings;
   }
 
-  /// Check if a block ID belongs to a specific Movotron's IV3MOD3SRL.
-  /// Matches 'TB_IV3MOD3SRL_1' and 'TB_IV3MOD3SRL_1_2' but NOT 'TB_IV3MOD3SRL_10'.
-  static bool _isIV3ForMovotron(String blockId, String movotronNum) {
-    final prefix = 'TB_IV3MOD3SRL_$movotronNum';
-    if (blockId == prefix) return true;
-    if (blockId.startsWith('${prefix}_')) return true;
-    return false;
-  }
 }
