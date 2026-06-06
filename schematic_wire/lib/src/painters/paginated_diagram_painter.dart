@@ -10,6 +10,8 @@ import '../models/power_grid.dart';
 import '../models/enums.dart' show ConnectionGroup;
 import '../models/diagram_overlay_group.dart';
 import '../models/channel_grouping.dart';
+import '../models/connector.dart';
+import '../models/cross_reference.dart';
 
 import 'power_grid_painter.dart' show PowerGridData;
 import 'terminal_block_painter.dart' show JumperConnection;
@@ -48,6 +50,7 @@ class BlockPaintContext {
     required this.channelGroupings,
     required this.terminalBlocks,
     required this.drawDashedRRect,
+    required this.connectors,
   });
 
   final WireColorSettings wireColorSettings;
@@ -75,6 +78,9 @@ class BlockPaintContext {
 
   /// Draw a dashed rounded rectangle outline (used for Movotron cabinet border).
   final void Function(Canvas, RRect, Paint) drawDashedRRect;
+
+  /// Cable connectors (plug+socket pairings) in the diagram.
+  final List<CableConnector> connectors;
 }
 
 /// Callback type for domain-specific connection routing.
@@ -106,6 +112,8 @@ class ConnectionPaintContext {
     required this.bundleYOverrides,
     required this.powerGrid,
     required this.overlayGroups,
+    required this.connectors,
+    required this.crossReferences,
     required this.drawText,
     required this.drawTextCentered,
     required this.drawOrthogonalWire,
@@ -118,6 +126,12 @@ class ConnectionPaintContext {
   final Map<String, double> bundleYOverrides;
   final PowerGridData? powerGrid;
   final List<DiagramOverlayGroup> overlayGroups;
+
+  /// Cable connectors available to the domain connection painter.
+  final List<CableConnector> connectors;
+
+  /// Cross-reference annotations available to the domain connection painter.
+  final List<CrossReference> crossReferences;
 
   final void Function(Canvas, String, Offset, TextStyle) drawText;
   final void Function(Canvas, String, Offset, TextStyle) drawTextCentered;
@@ -242,6 +256,20 @@ class PaginatedDiagramPainter extends CustomPainter {
   /// package to any domain model.
   final Color? Function(TerminalBlock, Terminal)? wireColorResolver;
 
+  /// Cable connectors (plug+socket pairings) present in this diagram.
+  ///
+  /// Passed through to [BlockPaintContext] and [ConnectionPaintContext] for
+  /// use by custom painters. The built-in painter does not render connector
+  /// symbols; use [customBlockPainters] or [customConnectionPainter] for that.
+  final List<CableConnector> connectors;
+
+  /// Cross-reference annotations to render on this page.
+  ///
+  /// For each [CrossReference] whose [CrossReference.pageIndex] matches the
+  /// current page, the painter draws a small IEC 60617-style arrow box at the
+  /// terminal exit point of the wire.
+  final List<CrossReference> crossReferences;
+
   const PaginatedDiagramPainter({
     required this.terminalBlocks,
     required this.connections,
@@ -269,6 +297,8 @@ class PaginatedDiagramPainter extends CustomPainter {
     this.customTerminalPositionResolver,
     this.customConnectionPainter,
     this.wireColorResolver,
+    this.connectors = const [],
+    this.crossReferences = const [],
   });
 
   @override
@@ -529,6 +559,38 @@ class PaginatedDiagramPainter extends CustomPainter {
     // Draw jumpers on top
     for (final jumper in visibleJumpers) {
       _drawJumper(canvas, jumper);
+    }
+
+    // Draw cross-reference markers for this page
+    _drawCrossReferences(canvas, visibleBlocks);
+  }
+
+  /// Render IEC 60617-style cross-reference markers for connections that
+  /// continue on another page.  Only markers whose [pageIndex] equals the
+  /// current page index are drawn.
+  void _drawCrossReferences(
+      Canvas canvas, List<TerminalBlock> visibleBlocks) {
+    final visibleBlockIds = visibleBlocks.map((b) => b.id).toSet();
+
+    for (final ref in crossReferences) {
+      if (ref.pageIndex != page.pageNumber - 1) continue;
+      if (!visibleBlockIds.contains(ref.blockId)) continue;
+
+      final block =
+          terminalBlocks.where((b) => b.id == ref.blockId).firstOrNull;
+      if (block == null) continue;
+
+      Offset anchor;
+      if (ref.terminalId != null) {
+        final terminal = block.getTerminalById(ref.terminalId!);
+        if (terminal == null) continue;
+        anchor = _getTerminalPosition(block, terminal) ??
+            block.diagramPosition.toOffset();
+      } else {
+        anchor = block.diagramPosition.toOffset();
+      }
+
+      drawCrossReferenceMarker(canvas, ref, anchor);
     }
   }
 
@@ -1362,6 +1424,7 @@ class PaginatedDiagramPainter extends CustomPainter {
       channelGroupings: channelGroupings,
       terminalBlocks: terminalBlocks,
       drawDashedRRect: _drawDashedRRect,
+      connectors: connectors,
     );
   }
 
@@ -1381,6 +1444,8 @@ class PaginatedDiagramPainter extends CustomPainter {
       bundleYOverrides: bundleYOverrides,
       powerGrid: powerGrid,
       overlayGroups: overlayGroups,
+      connectors: connectors,
+      crossReferences: crossReferences,
       drawText: _drawText,
       drawTextCentered: _drawTextCentered,
       drawOrthogonalWire: _drawOrthogonalWire,
@@ -1404,7 +1469,9 @@ class PaginatedDiagramPainter extends CustomPainter {
         oldDelegate.deviceRegistry != deviceRegistry ||
         oldDelegate.overlayGroups != overlayGroups ||
         oldDelegate.channelGroupings != channelGroupings ||
-        oldDelegate.wireColorResolver != wireColorResolver;
+        oldDelegate.wireColorResolver != wireColorResolver ||
+        oldDelegate.connectors != connectors ||
+        oldDelegate.crossReferences != crossReferences;
   }
 
 }

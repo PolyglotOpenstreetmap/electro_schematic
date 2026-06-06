@@ -7,6 +7,8 @@ export 'src/models/base.dart';
 
 export 'src/models/channel_grouping.dart';
 export 'src/models/connections.dart';
+export 'src/models/connector.dart';
+export 'src/models/cross_reference.dart';
 export 'src/models/custom_layout.dart';
 export 'src/models/diagram_config.dart';
 // DiagramLayout is also defined in custom_layout.dart; hide the duplicate here.
