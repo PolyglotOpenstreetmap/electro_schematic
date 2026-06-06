@@ -1,0 +1,25 @@
+name: schematic_device
+description: >-
+  Domain-agnostic device model and declarative drawing DSL for electro-schematic
+  rendering. Defines DeviceDefinition (connectors → terminals + appearance),
+  a drawable scene-graph DSL (primitives, composite symbols, parameters,
+  conditions, state bindings), and DeviceRenderer — the data-driven replacement
+  for hardcoded _draw* methods.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
