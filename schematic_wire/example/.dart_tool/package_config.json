@@ -92,6 +92,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "schematic_device",
+      "rootUri": "../../../schematic_device",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
       "name": "schematic_wire",
       "rootUri": "../../",
       "packageUri": "lib/",

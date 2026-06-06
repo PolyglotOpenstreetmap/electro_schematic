@@ -115,6 +115,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  schematic_device:
+    dependency: transitive
+    description:
+      path: "../../schematic_device"
+      relative: true
+    source: path
+    version: "0.1.0"
   schematic_wire:
     dependency: "direct main"
     description:

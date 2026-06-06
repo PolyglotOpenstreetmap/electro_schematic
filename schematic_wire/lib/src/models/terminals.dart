@@ -198,6 +198,11 @@ class TerminalBlock {
   /// See [BlockRenderKeys] for the set of well-known keys.
   final String? blockRenderKey;
 
+  /// Optional device-specific parameters for DeviceRenderer dispatch.
+  /// Set by the service layer when building domain blocks; consumed by
+  /// [PaginatedDiagramPainter._buildDeviceInstance] to construct a [DeviceInstance].
+  final Map<String, dynamic>? deviceParams;
+
   const TerminalBlock({
     required this.id,
     required this.name,
@@ -208,6 +213,7 @@ class TerminalBlock {
     this.isExisting = true,
     this.connectsToClockTower = false,
     this.blockRenderKey,
+    this.deviceParams,
   });
 
   /// Get all terminals across all groups
@@ -242,6 +248,7 @@ class TerminalBlock {
         'isExisting': isExisting,
         'connectsToClockTower': connectsToClockTower,
         if (blockRenderKey != null) 'blockRenderKey': blockRenderKey,
+        if (deviceParams != null) 'deviceParams': deviceParams,
       };
 
   /// JSON deserialization
@@ -262,6 +269,7 @@ class TerminalBlock {
       isExisting: json['isExisting'] as bool? ?? true,
       connectsToClockTower: json['connectsToClockTower'] as bool? ?? false,
       blockRenderKey: json['blockRenderKey'] as String?,
+      deviceParams: json['deviceParams'] as Map<String, dynamic>?,
     );
   }
 

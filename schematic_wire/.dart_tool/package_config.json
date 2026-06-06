@@ -104,6 +104,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "schematic_device",
+      "rootUri": "../../schematic_device",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
       "name": "sky_engine",
       "rootUri": "file:///home/jo/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",

@@ -13,11 +13,11 @@ import '../models/channel_grouping.dart';
 import '../models/block_render_keys.dart';
 import 'power_grid_painter.dart' show PowerGridData;
 import 'terminal_block_painter.dart' show JumperConnection;
-import 'iv3mod3srl_painter.dart';
 import '../models/wire_color_settings.dart';
 import '../models/title_block_config.dart';
 import 'title_block_painter.dart';
 import 'diagram_painter_utils.dart';
+import 'package:schematic_device/schematic_device.dart';
 
 part 'wiring_element_painter.dart';
 
@@ -43,6 +43,11 @@ class BlockPaintContext {
     required this.drawTextRight,
     required this.drawDashedRect,
     required this.drawDashDotRect,
+    required this.pkzCurrentFor,
+    required this.overlayGroups,
+    required this.channelGroupings,
+    required this.terminalBlocks,
+    required this.drawDashedRRect,
   });
 
   final WireColorSettings wireColorSettings;
@@ -54,6 +59,22 @@ class BlockPaintContext {
   final void Function(Canvas, String, Offset, TextStyle) drawTextRight;
   final void Function(Canvas, Rect, Paint) drawDashedRect;
   final void Function(Canvas, Rect, Paint) drawDashDotRect;
+
+  /// Callback to look up PKZ protection current for a Movotron channel.
+  /// Null when no PKZ data is available.
+  final double Function(String movotronId, int motorIndex)? pkzCurrentFor;
+
+  /// Overlay groups for sensor position calculations (linear/rotating motors).
+  final List<DiagramOverlayGroup> overlayGroups;
+
+  /// TRIAC channel groupings used by the Movotron cabinet painter.
+  final List<ChannelGrouping> channelGroupings;
+
+  /// All terminal blocks in the diagram (needed for IV3MOD3SRL lookup).
+  final List<TerminalBlock> terminalBlocks;
+
+  /// Draw a dashed rounded rectangle outline (used for Movotron cabinet border).
+  final void Function(Canvas, RRect, Paint) drawDashedRRect;
 }
 
 /// Painter for rendering a single page of a paginated wiring diagram.
@@ -137,6 +158,13 @@ class PaginatedDiagramPainter extends CustomPainter {
   /// true from the callback consumes the block; false falls through to built-in.
   final Map<String, BlockPainter> customBlockPainters;
 
+  /// Device definitions registered for [DeviceRenderer] dispatch.
+  ///
+  /// When a [TerminalBlock.blockRenderKey] matches a key in this map, the
+  /// painter builds a [DeviceInstance] from the block data and renders it via
+  /// [DeviceRenderer]. Checked before [customBlockPainters].
+  final Map<String, DeviceDefinition> deviceRegistry;
+
   const PaginatedDiagramPainter({
     required this.terminalBlocks,
     required this.connections,
@@ -160,6 +188,7 @@ class PaginatedDiagramPainter extends CustomPainter {
     this.titleBlockConfig,
     this.titleBlockFields = const {},
     this.customBlockPainters = const {},
+    this.deviceRegistry = const {},
   });
 
   @override
@@ -1025,70 +1054,6 @@ class PaginatedDiagramPainter extends CustomPainter {
     }
   }
 
-  /// Draw a dashed rectangle for motor channel grouping (dot-dash pattern)
-  ///
-  /// Uses dot-dash-dot-dash pattern to visually distinguish from motor group boxes.
-  void _drawMotorChannelDashedRect(Canvas canvas, Rect rect, Paint paint) {
-    const dotLength = 2.0;
-    const dashLength = 4.0;
-    const gapLength = 2.0;
-
-    // Draw each edge with dot-dash pattern
-    _drawMotorChannelDashedLine(canvas, rect.topLeft, rect.topRight, paint,
-        dotLength, dashLength, gapLength);
-    _drawMotorChannelDashedLine(canvas, rect.topRight, rect.bottomRight, paint,
-        dotLength, dashLength, gapLength);
-    _drawMotorChannelDashedLine(canvas, rect.bottomRight, rect.bottomLeft,
-        paint, dotLength, dashLength, gapLength);
-    _drawMotorChannelDashedLine(canvas, rect.bottomLeft, rect.topLeft, paint,
-        dotLength, dashLength, gapLength);
-  }
-
-  /// Draw a dashed line for motor channel grouping (dot-dash pattern)
-  void _drawMotorChannelDashedLine(
-    Canvas canvas,
-    Offset start,
-    Offset end,
-    Paint paint,
-    double dotLength,
-    double dashLength,
-    double gapLength,
-  ) {
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    final length = sqrt(dx * dx + dy * dy);
-    if (length == 0) return;
-
-    final unitX = dx / length;
-    final unitY = dy / length;
-
-    // Pattern: dot, gap, dash, gap (repeating)
-    final pattern = [dotLength, gapLength, dashLength, gapLength];
-    var currentPos = 0.0;
-    var patternIndex = 0;
-    var drawing = true;
-
-    while (currentPos < length) {
-      final segmentLength = min(pattern[patternIndex], length - currentPos);
-
-      if (drawing) {
-        final segmentStart = Offset(
-          start.dx + unitX * currentPos,
-          start.dy + unitY * currentPos,
-        );
-        final segmentEnd = Offset(
-          start.dx + unitX * (currentPos + segmentLength),
-          start.dy + unitY * (currentPos + segmentLength),
-        );
-        canvas.drawLine(segmentStart, segmentEnd, paint);
-      }
-
-      currentPos += segmentLength;
-      patternIndex = (patternIndex + 1) % pattern.length;
-      drawing = !drawing;
-    }
-  }
-
   /// Get connections visible in current viewport
   List<Connection> _getVisibleConnections(List<TerminalBlock> visibleBlocks) {
     // Connection is visible if either endpoint's terminal block is visible
@@ -1357,6 +1322,18 @@ class PaginatedDiagramPainter extends CustomPainter {
       drawTextRight: _drawTextRight,
       drawDashedRect: _drawDashedRect,
       drawDashDotRect: _drawDashDotRect,
+      pkzCurrentFor: pkzCurrentFor,
+      overlayGroups: overlayGroups,
+      channelGroupings: channelGroupings,
+      terminalBlocks: terminalBlocks,
+      drawDashedRRect: _drawDashedRRect,
+    );
+  }
+
+  /// Build a [RenderContext] for [DeviceRenderer] dispatch.
+  RenderContext _buildRenderContext() {
+    return RenderContext(
+      gridVoltage: powerGrid?.voltage.toDouble(),
     );
   }
 
@@ -1373,6 +1350,7 @@ class PaginatedDiagramPainter extends CustomPainter {
         oldDelegate.highlightedGroupId != highlightedGroupId ||
         oldDelegate.highlightedBundleId != highlightedBundleId ||
         oldDelegate.customBlockPainters != customBlockPainters ||
+        oldDelegate.deviceRegistry != deviceRegistry ||
         oldDelegate.overlayGroups != overlayGroups ||
         oldDelegate.channelGroupings != channelGroupings;
   }

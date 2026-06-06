@@ -23,7 +23,6 @@ export 'src/models/wiring_overview_models.dart';
 
 // ── Painters ─────────────────────────────────────────────────────────────────
 export 'src/painters/diagram_painter_utils.dart';
-export 'src/painters/iv3mod3srl_painter.dart';
 export 'src/painters/paginated_diagram_painter.dart';
 export 'src/painters/power_grid_painter.dart';
 export 'src/painters/terminal_block_painter.dart';
