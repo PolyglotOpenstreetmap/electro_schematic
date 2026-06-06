@@ -232,6 +232,16 @@ class PaginatedDiagramPainter extends CustomPainter {
   /// generic orthogonal routing.
   final ConnectionPainter? customConnectionPainter;
 
+  /// Optional resolver for wire phase color on non-sensor connections.
+  ///
+  /// When non-null, called with the destination [TerminalBlock] and
+  /// [Terminal]; the returned [Color] is used as the wire color instead of
+  /// the default [wireColorSettings.getPhaseColor] lookup on the terminal
+  /// label. Allows the host app to supply domain-specific phase mapping
+  /// (e.g. numbered terminals on a linear motor) without coupling this
+  /// package to any domain model.
+  final Color? Function(TerminalBlock, Terminal)? wireColorResolver;
+
   const PaginatedDiagramPainter({
     required this.terminalBlocks,
     required this.connections,
@@ -258,6 +268,7 @@ class PaginatedDiagramPainter extends CustomPainter {
     this.deviceRegistry = const {},
     this.customTerminalPositionResolver,
     this.customConnectionPainter,
+    this.wireColorResolver,
   });
 
   @override
@@ -479,12 +490,12 @@ class PaginatedDiagramPainter extends CustomPainter {
       // Draw highlight for single blocks (not multi-motor groups)
       if (highlightedGroupId != null && highlightedGroupId == block.id) {
         final blockPos = block.diagramPosition.toOffset();
-        final isMotor = _isMotorTerminalBlock(block.allTerminals);
-        final isLinear = _isLinearMotorTerminalBlock(block.allTerminals);
-        final bw = isMotor
-            ? 70.0
-            : (isLinear ? 40.0 : block.allTerminals.length * 30.0 + 20.0);
-        final bh = isMotor ? 60.0 : (isLinear ? 60.0 : 100.0);
+        final blockKey = block.blockRenderKey;
+        final bSize = (blockKey != null && blockSizes.containsKey(blockKey))
+            ? blockSizes[blockKey]!
+            : Size(block.allTerminals.length * 30.0 + 20.0, 100.0);
+        final bw = bSize.width;
+        final bh = bSize.height;
         final highlightRect =
             Rect.fromLTWH(blockPos.dx - 2, blockPos.dy - 2, bw + 4, bh + 4);
         final highlightPaint = Paint()
@@ -949,9 +960,6 @@ class PaginatedDiagramPainter extends CustomPainter {
         final s = blockSizes[key]!;
         blockWidth = s.width;
         blockHeight = s.height;
-      } else if (_isMotorTerminalBlock(terminals)) {
-        blockWidth = 145.0;
-        blockHeight = 120.0;
       } else {
         blockWidth = terminals.length * 30.0 + 20.0;
         blockHeight = 100.0;
@@ -1395,7 +1403,8 @@ class PaginatedDiagramPainter extends CustomPainter {
         oldDelegate.customBlockPainters != customBlockPainters ||
         oldDelegate.deviceRegistry != deviceRegistry ||
         oldDelegate.overlayGroups != overlayGroups ||
-        oldDelegate.channelGroupings != channelGroupings;
+        oldDelegate.channelGroupings != channelGroupings ||
+        oldDelegate.wireColorResolver != wireColorResolver;
   }
 
 }

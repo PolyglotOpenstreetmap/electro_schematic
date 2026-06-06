@@ -53,73 +53,7 @@ extension WiringElementPainter on PaginatedDiagramPainter {
       if (handled) return;
     }
 
-    // Backward compat: detect motor type from terminal labels for data without blockRenderKey
-    final terminals = block.allTerminals;
-    if (_isLinearMotorTerminalBlock(terminals)) {
-      const key2 = 'linear_motor';
-      if (customBlockPainters.containsKey(key2)) {
-        customBlockPainters[key2]!(canvas, block, _buildPaintContext());
-      }
-      return;
-    }
-    if (_isMotorTerminalBlock(terminals)) {
-      if (deviceRegistry.containsKey('rotating_motor')) {
-        final instance =
-            _buildDeviceInstance(block, deviceRegistry['rotating_motor']!);
-        const DeviceRenderer().render(canvas, instance,
-            context: _buildRenderContext());
-      }
-      return;
-    }
-
     _drawStandardTerminalBlock(canvas, block);
-  }
-
-  /// Check if terminal block is a motor block (U1-W2 pattern or DeCoster U-V-W pattern)
-  bool _isMotorTerminalBlock(List<Terminal> terminals) {
-    final labels = terminals.map((t) => t.label).toSet();
-
-    // Standard motor: U1, V1, W1, U2, V2, W2
-    final isStandardMotor = labels.contains('U1') &&
-        labels.contains('V1') &&
-        labels.contains('W1') &&
-        labels.contains('U2') &&
-        labels.contains('V2') &&
-        labels.contains('W2');
-
-    // DeCoster motor: U, V, W (without numbers)
-    final isDeCosterMotor = labels.contains('U') &&
-        labels.contains('V') &&
-        labels.contains('W') &&
-        !labels.contains('U1');
-
-    return isStandardMotor || isDeCosterMotor;
-  }
-
-  /// Check if terminal block is a linear motor block (1-6 pattern)
-  bool _isLinearMotorTerminalBlock(List<Terminal> terminals) {
-    final labels = terminals.map((t) => t.label).toSet();
-    // Linear motors have numbered terminals 1-6 (excluding sensors)
-    return labels.contains('1') &&
-        labels.contains('2') &&
-        labels.contains('3') &&
-        labels.contains('4') &&
-        labels.contains('5') &&
-        labels.contains('6');
-  }
-
-  /// Map linear motor terminal labels (1,3,5) to phase letters (U,V,W)
-  String _mapLinearTerminalToPhase(String label) {
-    switch (label) {
-      case '1':
-        return 'U';
-      case '3':
-        return 'V';
-      case '5':
-        return 'W';
-      default:
-        return label;
-    }
   }
 
   void _drawStandardTerminalBlock(Canvas canvas, TerminalBlock block) {
@@ -278,10 +212,8 @@ extension WiringElementPainter on PaginatedDiagramPainter {
     final strokeWidth = isSensorWire ? 1.0 : 2.5;
     final Color wireColor;
     if (!isSensorWire) {
-      final phaseLabel = _isLinearMotorTerminalBlock(destBlock.allTerminals)
-          ? _mapLinearTerminalToPhase(destTerminal.label)
-          : destTerminal.label;
-      wireColor = wireColorSettings.getPhaseColor(phaseLabel);
+      wireColor = wireColorResolver?.call(destBlock, destTerminal)
+          ?? wireColorSettings.getPhaseColor(destTerminal.label);
     } else {
       wireColor = _getWireColor(connection.wireSpec.color);
     }
