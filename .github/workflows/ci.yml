@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  analyze-and-test:
+    name: analyze + test (${{ matrix.package }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - schematic_wire
+          - schematic_cable
+          - schematic_topology
+          - schematic_device
+          - schematic_designer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.package }}
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: ${{ matrix.package }}
+        run: flutter analyze --fatal-warnings
+
+      - name: Test
+        working-directory: ${{ matrix.package }}
+        run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo "No test directory — skipping"
+          fi

@@ -8,6 +8,16 @@ description: >-
 version: 0.1.0
 publish_to: none
 
+homepage: https://github.com/PolyglotOpenstreetmap/electro_schematic
+repository: https://github.com/PolyglotOpenstreetmap/electro_schematic/tree/master/schematic_topology
+issue_tracker: https://github.com/PolyglotOpenstreetmap/electro_schematic/issues
+topics:
+  - flutter
+  - graph
+  - topology
+  - canvas
+  - diagram
+
 environment:
   sdk: ^3.6.0
 

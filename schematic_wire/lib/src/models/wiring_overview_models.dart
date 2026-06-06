@@ -2,6 +2,7 @@
 
 import 'base.dart';
 
+/// Type of node in the wiring-overview (installation overview) diagram.
 enum WiringOverviewNodeType {
   motor,
   striker,
@@ -14,6 +15,7 @@ enum WiringOverviewNodeType {
   serialDevice,
 }
 
+/// Type of edge (connection) in the wiring-overview diagram.
 enum WiringOverviewEdgeType { cable, serialBus, power }
 
 /// Where a terminal strip is anchored in the layout. The painter resolves these

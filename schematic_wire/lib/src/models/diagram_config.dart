@@ -3,9 +3,11 @@
 import 'dart:convert';
 import 'wire_color_settings.dart';
 
-/// Persistent configuration for wiring diagram display and export
-
 /// Strategy for sorting corridor heights in auto-distribution.
+///
+/// Controls which motors receive the lowest-numbered wire corridors,
+/// which in turn determines whether wires from nearby or distant motors
+/// cross over each other in the diagram.
 enum CorridorSortStrategy {
   /// Rightmost motors (highest Y) get corridors closest to Movotron cabinet.
   rightmostClosest,
@@ -17,6 +19,11 @@ enum CorridorSortStrategy {
   tallestStackClosest,
 }
 
+/// Persistent, serializable configuration for wiring diagram display and export.
+///
+/// Stores the current page, zoom/scroll state, wire spacing, color settings,
+/// and corridor sort strategy so that the diagram view can be restored across
+/// sessions.  Serialized to/from JSON and stored in the project file.
 class DiagramConfig {
   /// Current page index (0-based)
   final int currentPage;

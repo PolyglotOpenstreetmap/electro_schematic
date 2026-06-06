@@ -7,6 +7,7 @@ part of 'drawable_node.dart';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
+/// Stroke style for drawn lines and shape outlines.
 enum LineStyle {
   solid,
   dashed,
@@ -15,6 +16,7 @@ enum LineStyle {
   static LineStyle fromJson(String s) => LineStyle.values.byName(s);
 }
 
+/// Horizontal alignment of a [DrawText] label relative to its anchor point.
 enum TextAnchor {
   topLeft,
   topCenter,
@@ -31,6 +33,11 @@ enum TextAnchor {
 
 // ─── DrawRect ────────────────────────────────────────────────────────────────
 
+/// Draws an axis-aligned rectangle with optional fill, stroke, corner radius,
+/// and line style.
+///
+/// Use for device body outlines, terminal block borders, and background shapes.
+/// Both [fillColor] and [strokeColor] may be null (invisible) independently.
 class DrawRect extends DrawableNode {
   final Rect rect;
   final double cornerRadius;
@@ -112,6 +119,10 @@ class DrawRect extends DrawableNode {
 
 // ─── DrawCircle ───────────────────────────────────────────────────────────────
 
+/// Draws a circle (or ellipse) by center point and radius.
+///
+/// When [radiusY] is omitted the shape is a perfect circle. Use for dots,
+/// cable cross-section conductors, and schematic component symbols.
 class DrawCircle extends DrawableNode {
   final Offset center;
   final double radius;
@@ -183,6 +194,10 @@ class DrawCircle extends DrawableNode {
 
 // ─── DrawLine ─────────────────────────────────────────────────────────────────
 
+/// Draws a straight line segment between two points.
+///
+/// Supports solid, dashed, and dotted [lineStyle]. Use for wire stubs,
+/// terminal connectors, and IEC symbol lines.
 class DrawLine extends DrawableNode {
   final Offset start;
   final Offset end;
@@ -244,6 +259,10 @@ class DrawLine extends DrawableNode {
 
 // ─── DrawPolyline ─────────────────────────────────────────────────────────────
 
+/// Draws a multi-segment open path through an ordered list of points.
+///
+/// The path is stroked but not closed (for closed shapes use [DrawPath]).
+/// Useful for zigzag resistor symbols, winding outlines, and custom outlines.
 class DrawPolyline extends DrawableNode {
   final List<Offset> points;
   final Color color;
@@ -315,6 +334,12 @@ class DrawPolyline extends DrawableNode {
 
 // ─── DrawText ─────────────────────────────────────────────────────────────────
 
+/// Renders a text label at a fixed position within device-local coordinates.
+///
+/// The [text] string supports `\${paramId}` substitution — at render time
+/// each `\${…}` placeholder is replaced with the corresponding resolved
+/// parameter value from [DeviceInstance]. [anchor] controls whether the text
+/// is left-, center-, or right-aligned relative to [position].
 class DrawText extends DrawableNode {
   final String text;
   final Offset position;
@@ -391,6 +416,12 @@ class DrawText extends DrawableNode {
 
 // ─── DrawPath ─────────────────────────────────────────────────────────────────
 
+/// Draws an arbitrary path described as a list of `ui.Path` operations.
+///
+/// Operations are stored as a JSON-serializable list of `{'op': String, ...}`
+/// maps and reconstructed into a `ui.Path` at render time. Supports all
+/// standard Flutter path operations (moveTo, lineTo, cubicTo, close, etc.).
+/// Use for IEC component symbols, arrowheads, and complex outlines.
 class DrawPath extends DrawableNode {
   final List<String> svgPathData;
   final Color color;

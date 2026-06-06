@@ -8,6 +8,12 @@ part of 'drawable_node.dart';
 
 // ─── DrawCoil ─────────────────────────────────────────────────────────────────
 
+/// Draws an inductor / relay-coil winding as a series of filled semicircular
+/// arcs between [start] and [end].
+///
+/// The number of arcs is auto-calculated from the distance when [arcCount] is
+/// null, or pinned to [arcCount] when specified. Used for relay coil symbols,
+/// motor winding representations, and inductors.
 class DrawCoil extends DrawableNode {
   final Offset start;
   final Offset end;
@@ -67,6 +73,12 @@ class DrawCoil extends DrawableNode {
 
 // ─── DrawCapacitor ────────────────────────────────────────────────────────────
 
+/// Draws a capacitor symbol as two parallel horizontal plates on a vertical
+/// conductor.
+///
+/// [center] is the midpoint between the two plates; [plateWidth] and
+/// [plateGap] control the plate geometry. Used for motor run/start capacitor
+/// symbols.
 class DrawCapacitor extends DrawableNode {
   final Offset center;
   final bool horizontal;
@@ -120,6 +132,17 @@ class DrawCapacitor extends DrawableNode {
 
 // ─── DrawTerminalAnchor ───────────────────────────────────────────────────────
 
+/// Marks a named terminal connection point within a device's appearance.
+///
+/// The renderer draws a small dot at [position] whose fill color is
+/// determined by [colorBinding]:
+/// - [TerminalColorBinding.connected] → green
+/// - [TerminalColorBinding.jumper] → blue
+/// - [TerminalColorBinding.unconnected] → orange
+///
+/// When [colorBinding] is null the dot is drawn in [defaultColor] (default
+/// black). The [terminalId] must match a [TerminalDef.id] declared in the
+/// enclosing [DeviceDefinition].
 class DrawTerminalAnchor extends DrawableNode {
   final String terminalDefId;
   final double radius;
@@ -171,6 +194,13 @@ class DrawTerminalAnchor extends DrawableNode {
 
 // ─── DrawGroup ────────────────────────────────────────────────────────────────
 
+/// A conditional container that groups child [DrawableNode]s under a shared
+/// [showIf] condition.
+///
+/// When [DrawableNode.showIf] on the group itself evaluates to false the
+/// entire group (and all its [children]) is skipped. Useful for star/delta
+/// jumpers, capacitor presence, and optional winding configurations that
+/// depend on parameter values at render time.
 class DrawGroup extends DrawableNode {
   final List<DrawableNode> children;
   final Offset? offset;
@@ -325,8 +355,16 @@ class DrawDeviceRef extends DrawableNode {
 
 // ─── DrawRepeat ───────────────────────────────────────────────────────────────
 
+/// Direction in which [DrawRepeat] lays out repeated copies.
 enum RepeatAxis { horizontal, vertical }
 
+/// Repeats a list of child [DrawableNode]s a parametric number of times,
+/// stepping each copy by [step] pixels along [axis].
+///
+/// The repeat count is read from [countParam] in the instance's parameter
+/// map at render time, allowing a single [DeviceDefinition] to scale terminal
+/// strips to any count. Within repeated children, the special template
+/// `\${_repeatIndex}` is replaced with the zero-based iteration index.
 class DrawRepeat extends DrawableNode {
   final DrawableNode templateChild;
   final String count;
