@@ -1,0 +1,23 @@
+name: schematic_designer
+description: >-
+  Graphical editor for authoring DeviceDefinitions, with undo/redo, node
+  palette, properties panel, and JSON import/export.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  schematic_device:
+    path: ../schematic_device
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

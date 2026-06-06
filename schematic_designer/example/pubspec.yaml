@@ -1,0 +1,22 @@
+name: schematic_designer_example
+description: End-to-end example — design a device, export JSON, load it, render it.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  schematic_designer:
+    path: ..
+  schematic_device:
+    path: ../../schematic_device
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
