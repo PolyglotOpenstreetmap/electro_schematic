@@ -1,13 +1,14 @@
 // example/lib/main.dart
 //
-// Example app — renders a RotatingMotorDevice and a SimpleTerminalStripDevice
-// side by side using DeviceRenderer.
+// Example app — renders a RotatingMotorDevice, ThreePhaseMotorSymbol, and
+// SimpleTerminalStripDevice side by side using DeviceRenderer.
 
 import 'package:flutter/material.dart';
 import 'package:schematic_device/schematic_device.dart';
 
 import 'devices/rotating_motor_device.dart';
 import 'devices/simple_terminal_strip_device.dart';
+import 'devices/three_phase_motor_symbol.dart';
 
 void main() {
   // Register all built-in drawable node serializers.
@@ -58,17 +59,31 @@ class DeviceGalleryPage extends StatelessWidget {
       },
     );
 
+    // ── 3-phase motor schematic symbol
+    final motorSymbolDef = ThreePhaseMotorSymbol.build();
+    final motorSymbolInstance = DeviceInstance(
+      definition: motorSymbolDef,
+      position: const Offset(290, 20),
+      paramValues: const {'ref': 'M1'},
+      terminalConnected: const {
+        ThreePhaseMotorSymbol.u: true,
+        ThreePhaseMotorSymbol.v: true,
+        ThreePhaseMotorSymbol.w: true,
+      },
+    );
+
     // ── Terminal strip instance — 6 terminals
     final stripInstance = SimpleTerminalStripDevice.createInstance(
       count: 6,
       label: 'TB1',
-      position: const Offset(290, 40),
+      position: const Offset(380, 40),
     );
 
-    final instances = [motorInstance, motorDelta, stripInstance];
+    final instances = [motorInstance, motorDelta, motorSymbolInstance, stripInstance];
     final labels = [
       'Star motor (400 V)',
       'Delta motor (230 V)',
+      'Motor symbol (IEC)',
       'Terminal strip (6T)',
     ];
 

@@ -244,36 +244,49 @@ class DeviceRenderer {
   }
 
   void _renderCapacitor(Canvas canvas, DrawCapacitor node) {
-    final paint = Paint()
+    // Stubs (leads) use round caps; plates use butt caps so that plate length
+    // is exact and the symbol cannot be confused with a battery (which has
+    // asymmetric long/short plates).
+    final stubPaint = Paint()
       ..color = node.color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5 * node.scale
-      ..strokeCap = StrokeCap.square;
+      ..strokeCap = StrokeCap.round;
 
-    final plateLen = 10.0 * node.scale;
-    final gap = 3.0 * node.scale;
-    final stubLen = 8.0 * node.scale;
+    final platePaint = Paint()
+      ..color = node.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0 * node.scale  // slightly thicker for visual prominence
+      ..strokeCap = StrokeCap.butt;
+
+    final plateLen = 9.0 * node.scale;
+    final gap = 4.0 * node.scale;     // larger gap → clearer separation from battery
+    final stubLen = 10.0 * node.scale; // stubs longer than plates (convention)
     final cx = node.center.dx;
     final cy = node.center.dy;
 
     if (node.horizontal) {
+      // Plates (vertical lines)
       canvas.drawLine(Offset(cx - gap, cy - plateLen / 2),
-          Offset(cx - gap, cy + plateLen / 2), paint);
+          Offset(cx - gap, cy + plateLen / 2), platePaint);
       canvas.drawLine(Offset(cx + gap, cy - plateLen / 2),
-          Offset(cx + gap, cy + plateLen / 2), paint);
+          Offset(cx + gap, cy + plateLen / 2), platePaint);
+      // Leads (horizontal stubs)
       canvas.drawLine(
-          Offset(cx - gap - stubLen, cy), Offset(cx - gap, cy), paint);
+          Offset(cx - gap - stubLen, cy), Offset(cx - gap, cy), stubPaint);
       canvas.drawLine(
-          Offset(cx + gap, cy), Offset(cx + gap + stubLen, cy), paint);
+          Offset(cx + gap, cy), Offset(cx + gap + stubLen, cy), stubPaint);
     } else {
+      // Plates (horizontal lines)
       canvas.drawLine(Offset(cx - plateLen / 2, cy - gap),
-          Offset(cx + plateLen / 2, cy - gap), paint);
+          Offset(cx + plateLen / 2, cy - gap), platePaint);
       canvas.drawLine(Offset(cx - plateLen / 2, cy + gap),
-          Offset(cx + plateLen / 2, cy + gap), paint);
+          Offset(cx + plateLen / 2, cy + gap), platePaint);
+      // Leads (vertical stubs)
       canvas.drawLine(
-          Offset(cx, cy - gap - stubLen), Offset(cx, cy - gap), paint);
+          Offset(cx, cy - gap - stubLen), Offset(cx, cy - gap), stubPaint);
       canvas.drawLine(
-          Offset(cx, cy + gap), Offset(cx, cy + gap + stubLen), paint);
+          Offset(cx, cy + gap), Offset(cx, cy + gap + stubLen), stubPaint);
     }
   }
 

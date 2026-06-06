@@ -44,6 +44,12 @@
       "languageVersion": "3.9"
     },
     {
+      "name": "flutter_lints",
+      "rootUri": "file:///home/jo/.pub-cache/hosted/pub.dev/flutter_lints-5.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
       "name": "flutter_test",
       "rootUri": "file:///home/jo/flutter/packages/flutter_test",
       "packageUri": "lib/",
@@ -66,6 +72,12 @@
       "rootUri": "file:///home/jo/.pub-cache/hosted/pub.dev/leak_tracker_testing-3.0.2",
       "packageUri": "lib/",
       "languageVersion": "3.2"
+    },
+    {
+      "name": "lints",
+      "rootUri": "file:///home/jo/.pub-cache/hosted/pub.dev/lints-5.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
     },
     {
       "name": "matcher",

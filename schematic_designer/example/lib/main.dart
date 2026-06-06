@@ -45,7 +45,7 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   @override
   void initState() {
     super.initState();
-    _notifier = DesignerNotifier(_buildSimpleRelay());
+    _notifier = DesignerNotifier(_buildMotorSymbol());
   }
 
   @override
@@ -58,7 +58,7 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Schematic Designer — SimpleRelay example'),
+        title: const Text('Schematic Designer — 3-phase motor symbol'),
         backgroundColor: Colors.indigo.shade700,
         foregroundColor: Colors.white,
       ),
@@ -82,15 +82,92 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   }
 }
 
-// ─── Pre-populated SimpleRelay device ────────────────────────────────────────
+// ─── 3-phase motor schematic symbol (IEC 60617) ──────────────────────────────
+//
+// Canvas 60×72.  Circle centre (30, 50) radius 20.
+// Phase leads enter the circle from above at exact perimeter points:
+//   U  x=14 → y=50−sqrt(400−256)=38
+//   V  x=30 → y=50−20=30  (top)
+//   W  x=46 → y=38        (symmetric to U)
 
+DesignerState _buildMotorSymbol() {
+  return const DesignerState(
+    typeKey: 'motor_3ph_symbol',
+    deviceName: '3-phase motor (M1)',
+    canvasSize: Size(60, 72),
+    drawables: [
+      // ── Phase leads ────────────────────────────────────────────────────────
+      DrawLine(
+        id: 'lead_u',
+        start: Offset(14, 0),
+        end: Offset(14, 38),
+        color: Color(0xDD000000),
+        strokeWidth: 1.5,
+      ),
+      DrawLine(
+        id: 'lead_v',
+        start: Offset(30, 0),
+        end: Offset(30, 30),
+        color: Color(0xDD000000),
+        strokeWidth: 1.5,
+      ),
+      DrawLine(
+        id: 'lead_w',
+        start: Offset(46, 0),
+        end: Offset(46, 38),
+        color: Color(0xDD000000),
+        strokeWidth: 1.5,
+      ),
+      // ── Motor circle body ──────────────────────────────────────────────────
+      DrawCircle(
+        id: 'body',
+        center: Offset(30, 50),
+        radius: 20,
+        fillColor: Color(0xFFFFFFFF),
+        strokeColor: Color(0xDD000000),
+        strokeWidth: 1.5,
+      ),
+      // ── Labels inside circle ───────────────────────────────────────────────
+      DrawText(
+        id: 'label_m',
+        text: 'M',
+        position: Offset(30, 46),
+        anchor: TextAnchor.center,
+        fontSize: 14,
+        bold: true,
+        color: Color(0xDD000000),
+      ),
+      DrawText(
+        id: 'label_3ph',
+        text: '3~',
+        position: Offset(30, 57),
+        anchor: TextAnchor.center,
+        fontSize: 9,
+        color: Color(0xDD000000),
+      ),
+      // ── Reference label below circle ───────────────────────────────────────
+      DrawText(
+        id: 'label_ref',
+        text: 'M1',
+        position: Offset(30, 72),
+        anchor: TextAnchor.bottomCenter,
+        fontSize: 8,
+        bold: true,
+        color: Color(0xDD000000),
+      ),
+    ],
+  );
+}
+
+// ─── Simple relay (kept as reference) ────────────────────────────────────────
+
+// ignore: unused_element
 DesignerState _buildSimpleRelay() {
   return const DesignerState(
     typeKey: 'simple_relay',
     deviceName: 'Simple Relay (K)',
     canvasSize: Size(70, 60),
     drawables: [
-      // Body
       DrawRect(
         id: 'body',
         rect: Rect.fromLTWH(0, 0, 70, 60),
@@ -99,7 +176,6 @@ DesignerState _buildSimpleRelay() {
         strokeColor: Color(0xDD000000),
         strokeWidth: 1.5,
       ),
-      // Left contact terminal line
       DrawLine(
         id: 'lterm',
         start: Offset(10, 0),
@@ -107,7 +183,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 2,
       ),
-      // Right contact terminal line
       DrawLine(
         id: 'rterm',
         start: Offset(60, 0),
@@ -115,7 +190,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 2,
       ),
-      // Contact gap left part
       DrawLine(
         id: 'gap_l',
         start: Offset(10, 22),
@@ -123,7 +197,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 2,
       ),
-      // Contact gap right part
       DrawLine(
         id: 'gap_r',
         start: Offset(38, 22),
@@ -131,7 +204,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 2,
       ),
-      // Coil inner rectangle
       DrawRect(
         id: 'coil_body',
         rect: Rect.fromLTWH(18, 28, 34, 18),
@@ -139,7 +211,6 @@ DesignerState _buildSimpleRelay() {
         strokeColor: Color(0xDD000000),
         strokeWidth: 1,
       ),
-      // Coil winding
       DrawCoil(
         id: 'coil',
         start: Offset(18, 37),
@@ -148,7 +219,6 @@ DesignerState _buildSimpleRelay() {
         strokeWidth: 1.5,
         arcCount: 5,
       ),
-      // Coil terminal left
       DrawLine(
         id: 'coil_term_l',
         start: Offset(18, 37),
@@ -156,7 +226,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 1.5,
       ),
-      // Coil terminal right
       DrawLine(
         id: 'coil_term_r',
         start: Offset(52, 37),
@@ -164,7 +233,6 @@ DesignerState _buildSimpleRelay() {
         color: Color(0xDD000000),
         strokeWidth: 1.5,
       ),
-      // Label
       DrawText(
         id: 'label',
         text: 'K1',
