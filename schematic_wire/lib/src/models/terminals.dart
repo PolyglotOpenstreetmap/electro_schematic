@@ -195,7 +195,7 @@ class TerminalBlock {
   ///
   /// When non-null, the diagram painter uses this key to select the drawing
   /// method instead of falling back to `block.id.contains(...)` matching.
-  /// See [BlockRenderKeys] for the set of well-known keys.
+  /// The host app defines its own well-known key constants.
   final String? blockRenderKey;
 
   /// Optional device-specific parameters for DeviceRenderer dispatch.

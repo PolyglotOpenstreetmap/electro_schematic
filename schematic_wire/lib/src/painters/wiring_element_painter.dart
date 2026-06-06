@@ -17,10 +17,20 @@ extension WiringElementPainter on PaginatedDiagramPainter {
       connected[terminal.label] = terminal.isConnected;
     }
 
+    // Merge block.name and block.description into params so DeviceDefinition
+    // drawables can reference ${name} and ${description} without requiring
+    // the service layer to duplicate this in deviceParams.
+    final params = <String, dynamic>{
+      'name': block.name,
+      if (block.description != null && block.description!.isNotEmpty)
+        'description': block.description!,
+      ...?block.deviceParams,
+    };
+
     return DeviceInstance(
       definition: def,
       position: block.diagramPosition.toOffset(),
-      paramValues: block.deviceParams ?? const {},
+      paramValues: params,
       terminalConnected: connected,
     );
   }
@@ -41,12 +51,6 @@ extension WiringElementPainter on PaginatedDiagramPainter {
       final handled =
           customBlockPainters[key]!(canvas, block, _buildPaintContext());
       if (handled) return;
-    }
-
-    // Built-in dispatch for block types not yet migrated to DSL (Phase 2b)
-    if (key == BlockRenderKeys.iv3mod3srl) {
-      // Rendered inside Movotron cabinet by IV3MOD3SRLPainter — skip here
-      return;
     }
 
     // Backward compat: detect motor type from terminal labels for data without blockRenderKey

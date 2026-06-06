@@ -10,7 +10,7 @@ import '../models/power_grid.dart';
 import '../models/enums.dart' show ConnectionGroup;
 import '../models/diagram_overlay_group.dart';
 import '../models/channel_grouping.dart';
-import '../models/block_render_keys.dart';
+
 import 'power_grid_painter.dart' show PowerGridData;
 import 'terminal_block_painter.dart' show JumperConnection;
 import '../models/wire_color_settings.dart';
@@ -171,7 +171,7 @@ class PaginatedDiagramPainter extends CustomPainter {
   /// Sizes for specific block render keys, used for viewport culling.
   final Map<String, Size> blockSizes;
 
-  /// Y-offset from block top to the wire output point, keyed by BlockRenderKeys.
+  /// Y-offset from block top to the wire output point, keyed by blockRenderKey string.
   /// Blocks not in this map default to 40.0.
   final Map<String, double> blockOutputYOffsets;
 
