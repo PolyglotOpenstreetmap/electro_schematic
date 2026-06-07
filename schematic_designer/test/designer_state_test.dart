@@ -20,8 +20,15 @@ DesignerState _emptyState({
   return DesignerState(
     typeKey: typeKey,
     deviceName: deviceName,
-    canvasSize: canvasSize,
-    drawables: const [],
+    activeLevel: DrawingLevel.wire,
+    appearances: {
+      DrawingLevel.wire: LevelAppearance(
+        size: canvasSize,
+        drawables: const [],
+      ),
+    },
+    parameters: const [],
+    connectors: const [],
   );
 }
 
@@ -422,6 +429,535 @@ void main() {
       final result = translateNode(node, delta) as DrawGroup;
       // offset was null → (0,0) + delta
       expect(result.offset, delta);
+    });
+  });
+
+  // ─── 8. DesignerState.fromDefinition ─────────────────────────────────────
+
+  group('DesignerState.fromDefinition', () {
+    test('populates appearances from definition levels', () {
+      const def = DeviceDefinition(
+        typeKey: 'test',
+        name: 'Test',
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(80, 60)),
+          symbol: LevelAppearance(size: Size(20, 20)),
+        ),
+      );
+      final s = DesignerState.fromDefinition(def);
+      expect(s.appearances.containsKey(DrawingLevel.wire), isTrue);
+      expect(s.appearances.containsKey(DrawingLevel.symbol), isTrue);
+      expect(s.appearances.containsKey(DrawingLevel.cable), isFalse);
+    });
+
+    test('active level defaults to symbol when it is the first populated', () {
+      const def = DeviceDefinition(
+        typeKey: 'test',
+        name: 'Test',
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(80, 60)),
+          symbol: LevelAppearance(size: Size(20, 20)),
+        ),
+      );
+      final s = DesignerState.fromDefinition(def);
+      // [symbol, wire, cable, topology] order → symbol comes first
+      expect(s.activeLevel, DrawingLevel.symbol);
+    });
+
+    test('active level falls back to wire when only wire is present', () {
+      const def = DeviceDefinition(
+        typeKey: 'test',
+        name: 'Test',
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(80, 60)),
+        ),
+      );
+      final s = DesignerState.fromDefinition(def);
+      expect(s.activeLevel, DrawingLevel.wire);
+    });
+
+    test('initialLevel overrides default level selection', () {
+      const def = DeviceDefinition(
+        typeKey: 'test',
+        name: 'Test',
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(80, 60)),
+          cable: LevelAppearance(size: Size(80, 60)),
+        ),
+      );
+      final s = DesignerState.fromDefinition(def,
+          initialLevel: DrawingLevel.cable);
+      expect(s.activeLevel, DrawingLevel.cable);
+    });
+
+    test('connectors are preserved', () {
+      const def = DeviceDefinition(
+        typeKey: 'relay',
+        name: 'Relay',
+        connectors: [
+          ConnectorDef(
+            id: 'main',
+            name: 'Main',
+            placement: ConnectorPlacement.left,
+            terminals: [
+              TerminalDef(
+                id: 't1',
+                label: '1',
+                group: ElectricalGroup.power,
+                anchorInConnector: Offset(0, 10),
+              ),
+            ],
+          ),
+        ],
+        appearance: DeviceAppearance(
+            wire: LevelAppearance(size: Size(40, 20))),
+      );
+      final s = DesignerState.fromDefinition(def);
+      expect(s.connectors, hasLength(1));
+      expect(s.connectors.first.id, 'main');
+      expect(s.connectors.first.terminals, hasLength(1));
+    });
+
+    test('parameters are preserved', () {
+      const def = DeviceDefinition(
+        typeKey: 'relay',
+        name: 'Relay',
+        parameters: [
+          StringParamDef(id: 'label', label: 'Label'),
+        ],
+        appearance: DeviceAppearance(
+            wire: LevelAppearance(size: Size(40, 20))),
+      );
+      final s = DesignerState.fromDefinition(def);
+      expect(s.parameters, hasLength(1));
+      expect(s.parameters.first.id, 'label');
+    });
+
+    test('description is preserved', () {
+      const def = DeviceDefinition(
+        typeKey: 'relay',
+        name: 'Relay',
+        description: 'A test relay',
+        appearance: DeviceAppearance(
+            wire: LevelAppearance(size: Size(40, 20))),
+      );
+      final s = DesignerState.fromDefinition(def);
+      expect(s.description, 'A test relay');
+    });
+  });
+
+  // ─── 9. DesignerState.empty ───────────────────────────────────────────────
+
+  group('DesignerState.empty', () {
+    test('seeds wire level appearance', () {
+      final s = DesignerState.empty('relay', 'Relay');
+      expect(s.appearances.containsKey(DrawingLevel.wire), isTrue);
+      expect(s.activeLevel, DrawingLevel.wire);
+    });
+
+    test('drawables is empty', () {
+      final s = DesignerState.empty('relay', 'Relay');
+      expect(s.drawables, isEmpty);
+    });
+
+    test('connectors and parameters are empty', () {
+      final s = DesignerState.empty('relay', 'Relay');
+      expect(s.connectors, isEmpty);
+      expect(s.parameters, isEmpty);
+    });
+  });
+
+  // ─── 10. Level mutations ──────────────────────────────────────────────────
+
+  group('Level mutations', () {
+    test('addLevel adds a new level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.cable);
+      expect(
+          notifier.state.appearances.containsKey(DrawingLevel.cable), isTrue);
+    });
+
+    test('addLevel is no-op if level already exists', () {
+      final notifier = DesignerNotifier(_emptyState());
+      final before = notifier.state.appearances.length;
+      notifier.addLevel(DrawingLevel.wire); // already exists
+      expect(notifier.state.appearances.length, before);
+    });
+
+    test('addLevel pushes to history', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.cable);
+      expect(notifier.canUndo, isTrue);
+      notifier.undo();
+      expect(
+          notifier.state.appearances.containsKey(DrawingLevel.cable), isFalse);
+    });
+
+    test('setActiveLevel changes activeLevel', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.symbol);
+      notifier.setActiveLevel(DrawingLevel.symbol);
+      expect(notifier.state.activeLevel, DrawingLevel.symbol);
+    });
+
+    test('setActiveLevel clears selectedId', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addNode(_defaultRect);
+      notifier.addLevel(DrawingLevel.symbol);
+      notifier.setActiveLevel(DrawingLevel.symbol);
+      expect(notifier.state.selectedId, isNull);
+    });
+
+    test('setActiveLevel does not push to history', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.symbol);
+      final undoCountBefore = notifier.canUndo;
+      // undo count is true from addLevel; setActiveLevel should not add more
+      notifier.setActiveLevel(DrawingLevel.symbol);
+      // canUndo was already true; undoing should restore to pre-addLevel
+      notifier.undo();
+      expect(
+          notifier.state.appearances.containsKey(DrawingLevel.symbol), isFalse,
+          reason: 'undo should have removed the symbol level, not just reverted level switch');
+      expect(undoCountBefore, isTrue); // guard
+    });
+
+    test('removeLevel removes a level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.cable);
+      notifier.removeLevel(DrawingLevel.cable);
+      expect(
+          notifier.state.appearances.containsKey(DrawingLevel.cable), isFalse);
+    });
+
+    test('removeLevel does not remove the last level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      expect(notifier.state.appearances.length, 1);
+      notifier.removeLevel(DrawingLevel.wire);
+      expect(notifier.state.appearances.length, 1); // unchanged
+    });
+
+    test('editing wire level does not affect symbol level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addLevel(DrawingLevel.symbol);
+      notifier.setActiveLevel(DrawingLevel.wire);
+      notifier.addNode(_defaultRect);
+
+      expect(notifier.state.appearances[DrawingLevel.wire]!.drawables,
+          hasLength(1));
+      expect(notifier.state.appearances[DrawingLevel.symbol]!.drawables,
+          isEmpty);
+    });
+
+    test('setLevelSize updates the size of a level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.setLevelSize(DrawingLevel.wire, const Size(200, 150));
+      expect(notifier.state.canvasSize, const Size(200, 150));
+    });
+
+    test('setLevelSize is no-op for non-existent level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      expect(notifier.canUndo, isFalse);
+      notifier.setLevelSize(DrawingLevel.cable, const Size(200, 150));
+      // cable does not exist → no push
+      expect(notifier.canUndo, isFalse);
+    });
+
+    test('copyLevel copies drawables and size to target level', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addNode(_defaultRect);
+      notifier.addLevel(DrawingLevel.symbol);
+      notifier.copyLevel(DrawingLevel.wire, DrawingLevel.symbol);
+
+      expect(
+          notifier.state.appearances[DrawingLevel.symbol]!.drawables,
+          hasLength(1));
+      expect(
+          notifier.state.appearances[DrawingLevel.symbol]!.size,
+          notifier.state.appearances[DrawingLevel.wire]!.size);
+    });
+  });
+
+  // ─── 11. Parameter mutations ──────────────────────────────────────────────
+
+  group('Parameter mutations', () {
+    test('addParameter adds to state', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'P1'));
+      expect(notifier.state.parameters, hasLength(1));
+    });
+
+    test('addParameter pushes to history', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'P1'));
+      expect(notifier.canUndo, isTrue);
+      notifier.undo();
+      expect(notifier.state.parameters, isEmpty);
+    });
+
+    test('addParameter rejects duplicate id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'P1'));
+      notifier.addParameter(
+          const StringParamDef(id: 'p1', label: 'P1 duplicate'));
+      expect(notifier.state.parameters, hasLength(1));
+    });
+
+    test('updateParameter replaces by index', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'Old'));
+      notifier
+          .updateParameter(0, const StringParamDef(id: 'p1', label: 'New'));
+      expect(notifier.state.parameters.first.label, 'New');
+    });
+
+    test('updateParameter is no-op for out-of-range index', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'P1'));
+      final countBefore = notifier.state.parameters.length;
+      notifier.updateParameter(5, const StringParamDef(id: 'p9', label: 'P9'));
+      expect(notifier.state.parameters.length, countBefore);
+    });
+
+    test('removeParameter removes by id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'P1'));
+      notifier.removeParameter('p1');
+      expect(notifier.state.parameters, isEmpty);
+    });
+
+    test('exportDefinition reflects parameters', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'Param 1'));
+      final def = notifier.exportDefinition();
+      expect(def.parameters, hasLength(1));
+      expect(def.parameters.first.id, 'p1');
+    });
+  });
+
+  // ─── 12. Connector/terminal mutations ────────────────────────────────────
+
+  group('Connector/terminal mutations', () {
+    ConnectorDef makeConnector([String id = 'c1']) => ConnectorDef(
+          id: id,
+          name: 'Connector $id',
+          placement: ConnectorPlacement.left,
+          terminals: const [],
+        );
+
+    const testTerminal = TerminalDef(
+      id: 't1',
+      label: '1',
+      group: ElectricalGroup.power,
+      anchorInConnector: Offset(0, 10),
+    );
+
+    test('addConnector adds to state', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      expect(notifier.state.connectors, hasLength(1));
+    });
+
+    test('addConnector pushes to history', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      expect(notifier.canUndo, isTrue);
+      notifier.undo();
+      expect(notifier.state.connectors, isEmpty);
+    });
+
+    test('updateConnector replaces by id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.updateConnector(const ConnectorDef(
+        id: 'c1',
+        name: 'Updated Name',
+        placement: ConnectorPlacement.right,
+        terminals: [],
+      ));
+      expect(notifier.state.connectors.first.name, 'Updated Name');
+    });
+
+    test('removeConnector removes by id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.removeConnector('c1');
+      expect(notifier.state.connectors, isEmpty);
+    });
+
+    test('addTerminal adds terminal to connector', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.addTerminal('c1', testTerminal);
+      expect(notifier.state.connectors.first.terminals, hasLength(1));
+    });
+
+    test('updateTerminal replaces terminal by id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.addTerminal('c1', testTerminal);
+      const updated = TerminalDef(
+        id: 't1',
+        label: 'one-updated',
+        group: ElectricalGroup.ground,
+        anchorInConnector: Offset(0, 20),
+      );
+      notifier.updateTerminal('c1', updated);
+      expect(notifier.state.connectors.first.terminals.first.label,
+          'one-updated');
+    });
+
+    test('removeTerminal removes terminal by id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.addTerminal('c1', testTerminal);
+      notifier.removeTerminal('c1', 't1');
+      expect(notifier.state.connectors.first.terminals, isEmpty);
+    });
+
+    test('moveTerminalAnchor updates anchorInConnector', () {
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.addConnector(makeConnector());
+      notifier.addTerminal('c1', testTerminal);
+      notifier.moveTerminalAnchor('c1', 't1', const Offset(5, 15));
+      expect(
+          notifier.state.connectors.first.terminals.first.anchorInConnector,
+          const Offset(5, 15));
+    });
+
+    test('connector mutations are no-op for unknown connector id', () {
+      final notifier = DesignerNotifier(_emptyState());
+      final before = notifier.canUndo;
+      notifier.addTerminal('nonexistent', testTerminal);
+      expect(notifier.canUndo, before); // no change
+    });
+  });
+
+  // ─── 13. Lossless round-trip ──────────────────────────────────────────────
+
+  group('Lossless round-trip', () {
+    test('export and re-import produces identical JSON', () {
+      final notifier = DesignerNotifier(
+          _emptyState(typeKey: 'round_trip', deviceName: 'Round Trip'));
+      notifier.addNode(_defaultRect);
+      notifier.addParameter(const StringParamDef(id: 'p1', label: 'Param 1'));
+      notifier.addConnector(const ConnectorDef(
+        id: 'c1',
+        name: 'Conn 1',
+        placement: ConnectorPlacement.left,
+        terminals: [
+          TerminalDef(
+            id: 't1',
+            label: '1',
+            group: ElectricalGroup.power,
+            anchorInConnector: Offset(0, 10),
+          ),
+        ],
+      ));
+
+      final json1 = notifier.exportJson();
+
+      final notifier2 = DesignerNotifier(_emptyState());
+      notifier2.loadFromJson(json1);
+      final json2 = notifier2.exportJson();
+
+      expect(json1, json2);
+    });
+
+    test('multi-level definition round-trips all levels', () {
+      const def = DeviceDefinition(
+        typeKey: 'multi',
+        name: 'Multi Level',
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(80, 60)),
+          symbol: LevelAppearance(size: Size(20, 20)),
+        ),
+      );
+
+      final notifier = DesignerNotifier(DesignerState.fromDefinition(def));
+      final json1 = notifier.exportJson();
+
+      final notifier2 = DesignerNotifier(_emptyState());
+      notifier2.loadFromJson(json1);
+
+      expect(notifier2.state.appearances.containsKey(DrawingLevel.wire),
+          isTrue);
+      expect(notifier2.state.appearances.containsKey(DrawingLevel.symbol),
+          isTrue);
+    });
+  });
+
+  // ─── 14. Resolver injection ───────────────────────────────────────────────
+
+  group('Resolver injection', () {
+    test('resolver is reflected in renderContext.deviceResolver', () {
+      const def = DeviceDefinition(
+        typeKey: 'foo',
+        name: 'Foo',
+        appearance: DeviceAppearance(
+            wire: LevelAppearance(size: Size(40, 20))),
+      );
+      final notifier = DesignerNotifier(
+        _emptyState(),
+        resolver: (key) => key == 'foo' ? def : null,
+      );
+      expect(notifier.renderContext.deviceResolver, isNotNull);
+      expect(notifier.renderContext.deviceResolver!('foo'), same(def));
+      expect(notifier.renderContext.deviceResolver!('bar'), isNull);
+    });
+
+    test('renderContext.deviceResolver is null when no resolver provided', () {
+      final notifier = DesignerNotifier(_emptyState());
+      expect(notifier.renderContext.deviceResolver, isNull);
+    });
+  });
+
+  // ─── 15. Back-compat legacy load ─────────────────────────────────────────
+
+  group('Back-compat legacy load', () {
+    test('loads old single-wire format without connectors or params', () {
+      final oldJson = jsonEncode({
+        'typeKey': 'old_device',
+        'name': 'Old Device',
+        'parameters': <dynamic>[],
+        'connectors': <dynamic>[],
+        'appearance': {
+          'wire': {
+            'size': {'width': 80.0, 'height': 60.0},
+            'drawables': <dynamic>[],
+          },
+        },
+      });
+
+      final notifier = DesignerNotifier(_emptyState());
+      notifier.loadFromJson(oldJson);
+
+      expect(notifier.state.typeKey, 'old_device');
+      expect(notifier.state.appearances.containsKey(DrawingLevel.wire), isTrue);
+      expect(notifier.state.connectors, isEmpty);
+      expect(notifier.state.parameters, isEmpty);
+    });
+
+    test('loading pushes to history allowing undo', () {
+      final notifier = DesignerNotifier(_emptyState(typeKey: 'original'));
+      final json = jsonEncode({
+        'typeKey': 'loaded',
+        'name': 'Loaded Device',
+        'parameters': <dynamic>[],
+        'connectors': <dynamic>[],
+        'appearance': {
+          'wire': {
+            'size': {'width': 80.0, 'height': 60.0},
+            'drawables': <dynamic>[],
+          },
+        },
+      });
+
+      notifier.loadFromJson(json);
+      expect(notifier.state.typeKey, 'loaded');
+      expect(notifier.canUndo, isTrue);
+      notifier.undo();
+      expect(notifier.state.typeKey, 'original');
     });
   });
 }

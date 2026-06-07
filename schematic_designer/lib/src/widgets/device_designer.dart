@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../notifier/designer_notifier.dart';
 import '../utils/node_bounds.dart';
 import 'designer_canvas.dart';
+import 'level_switcher.dart';
 import 'node_list.dart';
 import 'node_palette.dart';
 import 'properties_panel.dart';
@@ -219,7 +220,10 @@ class _DesignerToolbar extends StatelessWidget {
                   fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
+          // Level switcher
+          LevelSwitcher(notifier: notifier),
+          const SizedBox(width: 12),
           // Palette
           NodePalette(
             activePaletteType: activePaletteType,

@@ -86,19 +86,23 @@ class _DeviceMetaEditor extends StatefulWidget {
 class _DeviceMetaEditorState extends State<_DeviceMetaEditor> {
   late TextEditingController _typeKeyCtrl;
   late TextEditingController _nameCtrl;
+  late TextEditingController _descCtrl;
   late TextEditingController _widthCtrl;
   late TextEditingController _heightCtrl;
+  DrawingLevel? _lastLevel;
 
   @override
   void initState() {
     super.initState();
     _syncFromState();
+    _lastLevel = widget.notifier.state.activeLevel;
   }
 
   void _syncFromState() {
     final s = widget.notifier.state;
     _typeKeyCtrl = TextEditingController(text: s.typeKey);
     _nameCtrl = TextEditingController(text: s.deviceName);
+    _descCtrl = TextEditingController(text: s.description ?? '');
     _widthCtrl =
         TextEditingController(text: s.canvasSize.width.toStringAsFixed(1));
     _heightCtrl =
@@ -106,21 +110,38 @@ class _DeviceMetaEditorState extends State<_DeviceMetaEditor> {
   }
 
   @override
+  void didUpdateWidget(_DeviceMetaEditor old) {
+    super.didUpdateWidget(old);
+    // Resync width/height when the user switches to a different level so
+    // the fields reflect the new level's canvas size.
+    final currentLevel = widget.notifier.state.activeLevel;
+    if (_lastLevel != currentLevel) {
+      _lastLevel = currentLevel;
+      final size = widget.notifier.state.canvasSize;
+      _widthCtrl.text = size.width.toStringAsFixed(1);
+      _heightCtrl.text = size.height.toStringAsFixed(1);
+    }
+  }
+
+  @override
   void dispose() {
     _typeKeyCtrl.dispose();
     _nameCtrl.dispose();
+    _descCtrl.dispose();
     _widthCtrl.dispose();
     _heightCtrl.dispose();
     super.dispose();
   }
 
   void _apply() {
-    final w = double.tryParse(_widthCtrl.text) ?? widget.notifier.state.canvasSize.width;
+    final w = double.tryParse(_widthCtrl.text) ??
+        widget.notifier.state.canvasSize.width;
     final h = double.tryParse(_heightCtrl.text) ??
         widget.notifier.state.canvasSize.height;
     widget.notifier.updateDeviceMeta(
       typeKey: _typeKeyCtrl.text,
       deviceName: _nameCtrl.text,
+      description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
       canvasSize: Size(w, h),
     );
   }
@@ -137,6 +158,8 @@ class _DeviceMetaEditorState extends State<_DeviceMetaEditor> {
         _buildField('Type Key', _typeKeyCtrl),
         const SizedBox(height: 4),
         _buildField('Name', _nameCtrl),
+        const SizedBox(height: 4),
+        _buildField('Description', _descCtrl),
         const SizedBox(height: 4),
         Row(
           children: [

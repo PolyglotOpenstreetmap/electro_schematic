@@ -96,6 +96,7 @@ class _DesignerCanvasState extends State<DesignerCanvas> {
                   definition: definition,
                   zoom: _zoom,
                   pad: _canvasPad,
+                  renderContext: widget.notifier.renderContext,
                 ),
                 size: Size.infinite,
               ),
@@ -166,12 +167,14 @@ class _CanvasPainter extends CustomPainter {
   final DeviceDefinition definition;
   final double zoom;
   final double pad;
+  final RenderContext renderContext;
 
   _CanvasPainter({
     required this.state,
     required this.definition,
     required this.zoom,
     required this.pad,
+    required this.renderContext,
   });
 
   @override
@@ -205,13 +208,21 @@ class _CanvasPainter extends CustomPainter {
     _drawDashedRect(
         canvas, Offset.zero & deviceSize, const Color(0xFFAAAAAA), 0.5);
 
-    // Render all device drawables
+    // Render the active level with default param values so showIf / templates
+    // evaluate meaningfully.  Composite refs resolve via renderContext when a
+    // resolver was injected into the notifier.
     const renderer = DeviceRenderer();
     final instance = DeviceInstance(
       definition: definition,
       position: Offset.zero,
+      paramValues: definition.defaultParams,
     );
-    renderer.render(canvas, instance, level: DrawingLevel.wire);
+    renderer.render(
+      canvas,
+      instance,
+      level: state.activeLevel as DrawingLevel,
+      context: renderContext,
+    );
 
     // Selection highlight
     final selectedId = state.selectedId as String?;

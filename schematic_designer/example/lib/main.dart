@@ -1,16 +1,20 @@
 // example/lib/main.dart
 //
-// End-to-end demonstration:
-//   1. Design a SimpleRelay device in the DeviceDesigner widget.
-//   2. Export to JSON.
-//   3. Load the JSON back into a DeviceDefinition.
-//   4. Render it with DeviceRenderer.
+// Motor-type gallery: demonstrates all three DSL DeviceDefinition variants:
+//   • Rotating motor  (standard 3-phase, star/delta terminal block)
+//   • Linear motor    (IV7xxx, 6 numbered terminals, zigzag coils)
+//   • DeCoster motor  (IV21xxx, 3 terminals U/V/W, internally connected)
+//
+// Left 60%: live DeviceDesigner for the selected motor type.
+// Right 40%: side-by-side wire + symbol level previews and JSON export.
 
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:schematic_designer/schematic_designer.dart';
 import 'package:schematic_device/schematic_device.dart';
+
+import 'devices/motor_devices.dart';
 
 void main() {
   SchematicDevicePackage.initialize();
@@ -23,12 +27,30 @@ class DesignerExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Device Designer Example',
+      title: 'Motor Device Designer',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
       home: const _DesignerHomePage(),
     );
   }
 }
+
+// ─── Motor type selector ──────────────────────────────────────────────────────
+
+enum _MotorPreset {
+  rotating('Rotating', Icons.rotate_right),
+  linear('Linear', Icons.linear_scale),
+  decoster('DeCoster', Icons.electrical_services);
+
+  final String label;
+  final IconData icon;
+  const _MotorPreset(this.label, this.icon);
+}
+
+DeviceDefinition _buildDef(_MotorPreset preset) => switch (preset) {
+      _MotorPreset.rotating => rotatingMotorDef(),
+      _MotorPreset.linear => linearMotorDef(),
+      _MotorPreset.decoster => deCosterMotorDef(),
+    };
 
 // ─── Home page ────────────────────────────────────────────────────────────────
 
@@ -40,12 +62,31 @@ class _DesignerHomePage extends StatefulWidget {
 }
 
 class _DesignerHomePageState extends State<_DesignerHomePage> {
-  late final DesignerNotifier _notifier;
+  _MotorPreset _preset = _MotorPreset.rotating;
+  late DesignerNotifier _notifier;
 
   @override
   void initState() {
     super.initState();
-    _notifier = DesignerNotifier(_buildMotorSymbol());
+    _notifier = _makeNotifier(_preset);
+  }
+
+  DesignerNotifier _makeNotifier(_MotorPreset preset) {
+    final def = _buildDef(preset);
+    // Start at the wire level so the terminal-block view is immediately visible.
+    final state = DesignerState.fromDefinition(def,
+        initialLevel: DrawingLevel.wire);
+    return DesignerNotifier(state);
+  }
+
+  void _selectPreset(_MotorPreset preset) {
+    if (preset == _preset) return;
+    final old = _notifier;
+    setState(() {
+      _preset = preset;
+      _notifier = _makeNotifier(preset);
+    });
+    old.dispose();
   }
 
   @override
@@ -58,23 +99,33 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Schematic Designer — 3-phase motor symbol'),
         backgroundColor: Colors.indigo.shade700,
         foregroundColor: Colors.white,
+        title: const Text('Motor Device Designer'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: _MotorPicker(
+              selected: _preset,
+              onSelect: _selectPreset,
+            ),
+          ),
+        ),
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left 60%: designer
+          // Left 60%: full device designer
           Expanded(
             flex: 6,
             child: DeviceDesigner(notifier: _notifier),
           ),
           const VerticalDivider(width: 1),
-          // Right 40%: preview
+          // Right 40%: live preview for both levels + JSON export
           Expanded(
             flex: 4,
-            child: _PreviewPane(notifier: _notifier),
+            child: _PreviewPane(notifier: _notifier, preset: _preset),
           ),
         ],
       ),
@@ -82,176 +133,48 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   }
 }
 
-// ─── 3-phase motor schematic symbol (IEC 60617) ──────────────────────────────
-//
-// Canvas 60×72.  Circle centre (30, 50) radius 20.
-// Phase leads enter the circle from above at exact perimeter points:
-//   U  x=14 → y=50−sqrt(400−256)=38
-//   V  x=30 → y=50−20=30  (top)
-//   W  x=46 → y=38        (symmetric to U)
+// ─── Motor type picker ────────────────────────────────────────────────────────
 
-DesignerState _buildMotorSymbol() {
-  return const DesignerState(
-    typeKey: 'motor_3ph_symbol',
-    deviceName: '3-phase motor (M1)',
-    canvasSize: Size(60, 72),
-    drawables: [
-      // ── Phase leads ────────────────────────────────────────────────────────
-      DrawLine(
-        id: 'lead_u',
-        start: Offset(14, 0),
-        end: Offset(14, 38),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      DrawLine(
-        id: 'lead_v',
-        start: Offset(30, 0),
-        end: Offset(30, 30),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      DrawLine(
-        id: 'lead_w',
-        start: Offset(46, 0),
-        end: Offset(46, 38),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      // ── Motor circle body ──────────────────────────────────────────────────
-      DrawCircle(
-        id: 'body',
-        center: Offset(30, 50),
-        radius: 20,
-        fillColor: Color(0xFFFFFFFF),
-        strokeColor: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      // ── Labels inside circle ───────────────────────────────────────────────
-      DrawText(
-        id: 'label_m',
-        text: 'M',
-        position: Offset(30, 46),
-        anchor: TextAnchor.center,
-        fontSize: 14,
-        bold: true,
-        color: Color(0xDD000000),
-      ),
-      DrawText(
-        id: 'label_3ph',
-        text: '3~',
-        position: Offset(30, 57),
-        anchor: TextAnchor.center,
-        fontSize: 9,
-        color: Color(0xDD000000),
-      ),
-      // ── Reference label below circle ───────────────────────────────────────
-      DrawText(
-        id: 'label_ref',
-        text: 'M1',
-        position: Offset(30, 72),
-        anchor: TextAnchor.bottomCenter,
-        fontSize: 8,
-        bold: true,
-        color: Color(0xDD000000),
-      ),
-    ],
-  );
-}
+class _MotorPicker extends StatelessWidget {
+  final _MotorPreset selected;
+  final void Function(_MotorPreset) onSelect;
 
-// ─── Simple relay (kept as reference) ────────────────────────────────────────
+  const _MotorPicker({required this.selected, required this.onSelect});
 
-// ignore: unused_element
-DesignerState _buildSimpleRelay() {
-  return const DesignerState(
-    typeKey: 'simple_relay',
-    deviceName: 'Simple Relay (K)',
-    canvasSize: Size(70, 60),
-    drawables: [
-      DrawRect(
-        id: 'body',
-        rect: Rect.fromLTWH(0, 0, 70, 60),
-        cornerRadius: 2,
-        fillColor: Color(0xFFF5F5F5),
-        strokeColor: Color(0xDD000000),
-        strokeWidth: 1.5,
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_MotorPreset>(
+      segments: _MotorPreset.values
+          .map((p) => ButtonSegment<_MotorPreset>(
+                value: p,
+                label: Text(p.label,
+                    style: const TextStyle(fontSize: 12, color: Colors.white)),
+                icon: Icon(p.icon, size: 16, color: Colors.white70),
+              ))
+          .toList(),
+      selected: {selected},
+      onSelectionChanged: (s) => onSelect(s.first),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.indigo.shade400;
+          }
+          return Colors.indigo.shade800;
+        }),
+        side: WidgetStateProperty.all(
+            BorderSide(color: Colors.indigo.shade300, width: 1)),
       ),
-      DrawLine(
-        id: 'lterm',
-        start: Offset(10, 0),
-        end: Offset(10, 18),
-        color: Color(0xDD000000),
-        strokeWidth: 2,
-      ),
-      DrawLine(
-        id: 'rterm',
-        start: Offset(60, 0),
-        end: Offset(60, 18),
-        color: Color(0xDD000000),
-        strokeWidth: 2,
-      ),
-      DrawLine(
-        id: 'gap_l',
-        start: Offset(10, 22),
-        end: Offset(32, 22),
-        color: Color(0xDD000000),
-        strokeWidth: 2,
-      ),
-      DrawLine(
-        id: 'gap_r',
-        start: Offset(38, 22),
-        end: Offset(60, 22),
-        color: Color(0xDD000000),
-        strokeWidth: 2,
-      ),
-      DrawRect(
-        id: 'coil_body',
-        rect: Rect.fromLTWH(18, 28, 34, 18),
-        fillColor: Color(0xFFFFFFFF),
-        strokeColor: Color(0xDD000000),
-        strokeWidth: 1,
-      ),
-      DrawCoil(
-        id: 'coil',
-        start: Offset(18, 37),
-        end: Offset(52, 37),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-        arcCount: 5,
-      ),
-      DrawLine(
-        id: 'coil_term_l',
-        start: Offset(18, 37),
-        end: Offset(10, 37),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      DrawLine(
-        id: 'coil_term_r',
-        start: Offset(52, 37),
-        end: Offset(60, 37),
-        color: Color(0xDD000000),
-        strokeWidth: 1.5,
-      ),
-      DrawText(
-        id: 'label',
-        text: 'K1',
-        position: Offset(35, 57),
-        anchor: TextAnchor.bottomCenter,
-        fontSize: 10,
-        bold: true,
-        color: Color(0xDD000000),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 // ─── Preview pane ─────────────────────────────────────────────────────────────
 
 class _PreviewPane extends StatefulWidget {
   final DesignerNotifier notifier;
+  final _MotorPreset preset;
 
-  const _PreviewPane({required this.notifier});
+  const _PreviewPane({required this.notifier, required this.preset});
 
   @override
   State<_PreviewPane> createState() => _PreviewPaneState();
@@ -259,8 +182,8 @@ class _PreviewPane extends StatefulWidget {
 
 class _PreviewPaneState extends State<_PreviewPane> {
   String? _exportedJson;
-  bool _renderFromJson = false;
-  DeviceDefinition? _jsonLoadedDef;
+  bool _showJson = false;
+  DeviceDefinition? _jsonDef;
 
   void _exportJson() {
     final json = widget.notifier.exportJson();
@@ -268,8 +191,8 @@ class _PreviewPaneState extends State<_PreviewPane> {
         DeviceDefinition.fromJson(jsonDecode(json) as Map<String, dynamic>);
     setState(() {
       _exportedJson = json;
-      _jsonLoadedDef = def;
-      _renderFromJson = true;
+      _jsonDef = def;
+      _showJson = true;
     });
   }
 
@@ -280,58 +203,51 @@ class _PreviewPaneState extends State<_PreviewPane> {
       children: [
         // Header bar
         Container(
-          height: 48,
+          height: 44,
           color: Colors.indigo.shade700,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              const Text('Preview',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14)),
+              Text(
+                '${widget.preset.label} — Preview',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13),
+              ),
               const Spacer(),
               TextButton.icon(
                 onPressed: _exportJson,
-                icon: const Icon(Icons.download, size: 16,
-                    color: Colors.white70),
+                icon: const Icon(Icons.download, size: 15, color: Colors.white70),
                 label: const Text('Export JSON',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    style: TextStyle(color: Colors.white70, fontSize: 11)),
               ),
               if (_exportedJson != null)
                 Switch(
-                  value: _renderFromJson,
-                  onChanged: (v) => setState(() => _renderFromJson = v),
+                  value: _showJson,
+                  onChanged: (v) => setState(() => _showJson = v),
                   activeThumbColor: Colors.lightBlueAccent,
                 ),
             ],
           ),
         ),
 
-        // Live preview
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              const Text('Live preview',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              ListenableBuilder(
-                listenable: widget.notifier,
-                builder: (_, __) => _DevicePreview(
-                  definition: widget.notifier.exportDefinition(),
-                ),
-              ),
-            ],
-          ),
+        // Live wire + symbol previews
+        ListenableBuilder(
+          listenable: widget.notifier,
+          builder: (_, __) {
+            final def = widget.notifier.exportDefinition();
+            return Padding(
+              padding: const EdgeInsets.all(12),
+              child: _LevelPreviewRow(definition: def),
+            );
+          },
         ),
 
-        // JSON output + JSON-loaded render
-        if (_exportedJson != null) ...[
-          const Divider(height: 1),
+        const Divider(height: 1),
+
+        // JSON output area
+        if (_exportedJson != null && _showJson)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -343,9 +259,8 @@ class _PreviewPaneState extends State<_PreviewPane> {
                     children: [
                       const Text('Exported JSON',
                           style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
-                      if (_renderFromJson)
+                              fontSize: 11, fontWeight: FontWeight.w600)),
+                      if (_jsonDef != null)
                         const Padding(
                           padding: EdgeInsets.only(left: 8),
                           child: Text('(loaded & re-rendered below)',
@@ -365,7 +280,7 @@ class _PreviewPaneState extends State<_PreviewPane> {
                     ),
                   ),
                 ),
-                if (_renderFromJson && _jsonLoadedDef != null) ...[
+                if (_jsonDef != null) ...[
                   const Divider(height: 1),
                   Padding(
                     padding: const EdgeInsets.all(12),
@@ -376,77 +291,166 @@ class _PreviewPaneState extends State<_PreviewPane> {
                                 fontSize: 11,
                                 color: Colors.green,
                                 fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 6),
-                        _DevicePreview(definition: _jsonLoadedDef!),
+                        const SizedBox(height: 8),
+                        _LevelPreviewRow(definition: _jsonDef!),
                       ],
                     ),
                   ),
                 ],
               ],
             ),
+          )
+        else if (_exportedJson == null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'Press "Export JSON" to see the DSL round-trip.',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
           ),
-        ],
       ],
     );
   }
 }
 
-// ─── Device preview widget ────────────────────────────────────────────────────
+// ─── Wire + symbol side-by-side preview ───────────────────────────────────────
 
-class _DevicePreview extends StatelessWidget {
+class _LevelPreviewRow extends StatelessWidget {
   final DeviceDefinition definition;
-
-  const _DevicePreview({required this.definition});
+  const _LevelPreviewRow({required this.definition});
 
   @override
   Widget build(BuildContext context) {
-    final appearance = definition.appearance.wire;
-    final deviceSize =
-        appearance?.size ?? const Size(80, 60);
-    const zoom = 3.0;
-
-    final widgetW = deviceSize.width * zoom;
-    final widgetH = deviceSize.height * zoom;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      width: widgetW + 16,
-      height: widgetH + 16,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: CustomPaint(
-          size: Size(widgetW, widgetH),
-          painter: _PreviewPainter(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _LabelledPreview(
+            label: 'Wire level',
+            level: DrawingLevel.wire,
             definition: definition,
-            zoom: zoom,
+            zoom: 3.5,
           ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _LabelledPreview(
+            label: 'Symbol level',
+            level: DrawingLevel.symbol,
+            definition: definition,
+            zoom: 3.0,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _PreviewPainter extends CustomPainter {
+class _LabelledPreview extends StatelessWidget {
+  final String label;
+  final DrawingLevel level;
   final DeviceDefinition definition;
   final double zoom;
 
-  const _PreviewPainter({required this.definition, required this.zoom});
+  const _LabelledPreview({
+    required this.label,
+    required this.level,
+    required this.definition,
+    required this.zoom,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = definition.appearance.forLevel(level);
+    if (appearance == null) {
+      return Column(
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Center(
+              child: Text('—', style: TextStyle(color: Colors.grey)),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final deviceSize = appearance.size;
+    final widgetW = deviceSize.width * zoom;
+    final widgetH = deviceSize.height * zoom;
+
+    return Column(
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 10,
+                color: Colors.grey,
+                fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          width: widgetW + 16,
+          height: widgetH + 16,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: CustomPaint(
+              size: Size(widgetW, widgetH),
+              painter: _PreviewPainter(
+                definition: definition,
+                level: level,
+                zoom: zoom,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Canvas painter for a specific level ─────────────────────────────────────
+
+class _PreviewPainter extends CustomPainter {
+  final DeviceDefinition definition;
+  final DrawingLevel level;
+  final double zoom;
+
+  const _PreviewPainter({
+    required this.definition,
+    required this.level,
+    required this.zoom,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(zoom);
     const renderer = DeviceRenderer();
-    final instance = DeviceInstance(definition: definition);
-    renderer.render(canvas, instance, level: DrawingLevel.wire);
+    final instance = DeviceInstance(
+      definition: definition,
+      position: Offset.zero,
+      paramValues: definition.defaultParams,
+    );
+    renderer.render(canvas, instance, level: level);
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(_PreviewPainter old) =>
-      old.definition != definition || old.zoom != zoom;
+      old.definition != definition || old.level != level || old.zoom != zoom;
 }

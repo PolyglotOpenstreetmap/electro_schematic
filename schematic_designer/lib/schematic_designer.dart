@@ -6,4 +6,6 @@ export 'src/model/designer_state.dart';
 export 'src/notifier/designer_notifier.dart';
 export 'src/utils/node_bounds.dart';
 export 'src/utils/node_translation.dart';
+export 'src/widgets/designer_canvas.dart';
 export 'src/widgets/device_designer.dart';
+export 'src/widgets/level_switcher.dart';
