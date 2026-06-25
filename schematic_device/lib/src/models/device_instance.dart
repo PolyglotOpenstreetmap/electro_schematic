@@ -93,6 +93,14 @@ class DeviceInstance {
   /// [ChildPlacement.levelOverride].
   final List<ChildPlacement> children;
 
+  /// Per-instance drawing-level override.
+  ///
+  /// When non-null, this instance is rendered at [forcedLevel] regardless of
+  /// the level the surrounding diagram requested. Used to force-expand a
+  /// composite on a high-abstraction diagram (e.g. `forcedLevel: wire` on a
+  /// symbol-level sheet) or force-collapse one on a detailed diagram.
+  final DrawingLevel? forcedLevel;
+
   const DeviceInstance({
     required this.definition,
     this.position = Offset.zero,
@@ -100,15 +108,19 @@ class DeviceInstance {
     this.terminalConnected = const {},
     this.terminalIsJumper = const {},
     this.children = const [],
+    this.forcedLevel,
   });
+
+  /// The level this instance actually renders at when the diagram requests
+  /// [requestedLevel].
+  DrawingLevel effectiveLevel(DrawingLevel requestedLevel) =>
+      forcedLevel ?? requestedLevel;
 
   /// Resolved parameter value: instance value → definition default → null.
   dynamic param(String id) {
     if (paramValues.containsKey(id)) return paramValues[id];
     try {
-      return definition.parameters
-          .firstWhere((p) => p.id == id)
-          .defaultValue;
+      return definition.parameters.firstWhere((p) => p.id == id).defaultValue;
     } catch (_) {
       return null;
     }
@@ -127,7 +139,12 @@ class DeviceInstance {
     return def?.isJumper ?? false;
   }
 
+  static const Object _unset = Object();
+
   /// Creates a copy with modified fields.
+  ///
+  /// [forcedLevel] uses a sentinel so it can be explicitly cleared:
+  /// `copyWith(forcedLevel: null)` removes the override.
   DeviceInstance copyWith({
     DeviceDefinition? definition,
     Offset? position,
@@ -135,6 +152,7 @@ class DeviceInstance {
     Map<String, bool>? terminalConnected,
     Map<String, bool>? terminalIsJumper,
     List<ChildPlacement>? children,
+    Object? forcedLevel = _unset,
   }) {
     return DeviceInstance(
       definition: definition ?? this.definition,
@@ -143,6 +161,9 @@ class DeviceInstance {
       terminalConnected: terminalConnected ?? this.terminalConnected,
       terminalIsJumper: terminalIsJumper ?? this.terminalIsJumper,
       children: children ?? this.children,
+      forcedLevel: identical(forcedLevel, _unset)
+          ? this.forcedLevel
+          : forcedLevel as DrawingLevel?,
     );
   }
 
@@ -154,6 +175,7 @@ class DeviceInstance {
         'terminalIsJumper': terminalIsJumper,
         if (children.isNotEmpty)
           'children': children.map((c) => c.toJson()).toList(),
+        if (forcedLevel != null) 'forcedLevel': forcedLevel!.name,
       };
 
   /// Deserializes a [DeviceInstance] from JSON.
@@ -184,8 +206,7 @@ class DeviceInstance {
         (posJson['dx'] as num).toDouble(),
         (posJson['dy'] as num).toDouble(),
       ),
-      paramValues:
-          Map<String, dynamic>.from(json['paramValues'] as Map? ?? {}),
+      paramValues: Map<String, dynamic>.from(json['paramValues'] as Map? ?? {}),
       terminalConnected:
           Map<String, bool>.from(json['terminalConnected'] as Map? ?? {}),
       terminalIsJumper:
@@ -196,6 +217,9 @@ class DeviceInstance {
                 resolver: resolver,
               ))
           .toList(),
+      forcedLevel: json['forcedLevel'] != null
+          ? DrawingLevel.fromJson(json['forcedLevel'] as String)
+          : null,
     );
   }
 }

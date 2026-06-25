@@ -86,11 +86,10 @@ void main() {
       final restored = ConditionExpr.fromJson(original.toJson());
       expect(restored, isA<ParamEqualsCondition>());
       expect(
-          (restored as ParamEqualsCondition).evaluate(
-              {'motorType': 'decoster'}, RenderContext.empty),
+          (restored as ParamEqualsCondition)
+              .evaluate({'motorType': 'decoster'}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.evaluate({'motorType': 'standard'}, RenderContext.empty),
+      expect(restored.evaluate({'motorType': 'standard'}, RenderContext.empty),
           isFalse);
     });
 
@@ -102,8 +101,7 @@ void main() {
           (restored as ParamLessThanCondition)
               .evaluate({'voltage': 230}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.evaluate({'voltage': 400}, RenderContext.empty), isFalse);
+      expect(restored.evaluate({'voltage': 400}, RenderContext.empty), isFalse);
     });
 
     test('ParamGreaterThanCondition', () {
@@ -137,8 +135,7 @@ void main() {
           (restored as BoolParamCondition)
               .evaluate({'hasCapacitor': true}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.evaluate({'hasCapacitor': false}, RenderContext.empty),
+      expect(restored.evaluate({'hasCapacitor': false}, RenderContext.empty),
           isFalse);
     });
 
@@ -160,11 +157,10 @@ void main() {
       final restored = ConditionExpr.fromJson(original.toJson());
       expect(restored, isA<AndCondition>());
       expect(
-          (restored as AndCondition).evaluate(
-              {'a': true, 'b': true}, RenderContext.empty),
+          (restored as AndCondition)
+              .evaluate({'a': true, 'b': true}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.evaluate({'a': true, 'b': false}, RenderContext.empty),
+      expect(restored.evaluate({'a': true, 'b': false}, RenderContext.empty),
           isFalse);
     });
 
@@ -176,11 +172,10 @@ void main() {
       final restored = ConditionExpr.fromJson(original.toJson());
       expect(restored, isA<OrCondition>());
       expect(
-          (restored as OrCondition).evaluate(
-              {'a': false, 'b': true}, RenderContext.empty),
+          (restored as OrCondition)
+              .evaluate({'a': false, 'b': true}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.evaluate({'a': false, 'b': false}, RenderContext.empty),
+      expect(restored.evaluate({'a': false, 'b': false}, RenderContext.empty),
           isFalse);
     });
   });
@@ -255,8 +250,7 @@ void main() {
         fontSize: 8,
         bold: false,
       );
-      final restored =
-          DrawableNodeFactory.fromJson(node.toJson()) as DrawText;
+      final restored = DrawableNodeFactory.fromJson(node.toJson()) as DrawText;
       expect(restored.text, r'${motorRef}');
       expect(restored.anchor, TextAnchor.bottomCenter);
     });
@@ -267,8 +261,7 @@ void main() {
         color: Color(0xFF333333),
         fill: true,
       );
-      final restored =
-          DrawableNodeFactory.fromJson(node.toJson()) as DrawPath;
+      final restored = DrawableNodeFactory.fromJson(node.toJson()) as DrawPath;
       expect(restored.svgPathData, ['M 0 0', 'L 10 10', 'Z']);
       expect(restored.fill, isTrue);
     });
@@ -281,8 +274,7 @@ void main() {
         strokeWidth: 1.5,
         arcCount: 4,
       );
-      final restored =
-          DrawableNodeFactory.fromJson(node.toJson()) as DrawCoil;
+      final restored = DrawableNodeFactory.fromJson(node.toJson()) as DrawCoil;
       expect(restored.arcCount, 4);
       expect(restored.start, const Offset(10, 8));
     });
@@ -323,17 +315,14 @@ void main() {
           ),
         ],
       );
-      final restored =
-          DrawableNodeFactory.fromJson(node.toJson()) as DrawGroup;
+      final restored = DrawableNodeFactory.fromJson(node.toJson()) as DrawGroup;
       expect(restored.id, 'star');
       expect(restored.children.length, 1);
       expect(restored.showIf, isNotNull);
       // Verify the condition evaluates correctly after round-trip
-      expect(
-          restored.showIf!.evaluate({'voltage': 400}, RenderContext.empty),
+      expect(restored.showIf!.evaluate({'voltage': 400}, RenderContext.empty),
           isTrue);
-      expect(
-          restored.showIf!.evaluate({'voltage': 230}, RenderContext.empty),
+      expect(restored.showIf!.evaluate({'voltage': 230}, RenderContext.empty),
           isFalse);
     });
 
@@ -430,7 +419,8 @@ void main() {
         description: 'A comprehensive test device',
         parameters: [
           StringParamDef(id: 'ref', label: 'Reference'),
-          NumParamDef(id: 'count', label: 'Count', defaultValue: 4, min: 1, max: 32),
+          NumParamDef(
+              id: 'count', label: 'Count', defaultValue: 4, min: 1, max: 32),
           BoolParamDef(id: 'flag', label: 'Flag'),
           EnumParamDef(
             id: 'type',
@@ -567,6 +557,202 @@ void main() {
       );
       expect(copy.position, const Offset(100, 200));
       expect(copy.param('voltage'), 110);
+    });
+
+    test('forcedLevel defaults to null and is omitted from JSON', () {
+      final inst = DeviceInstance(definition: def);
+      expect(inst.forcedLevel, isNull);
+      expect(inst.toJson().containsKey('forcedLevel'), isFalse);
+    });
+
+    test('forcedLevel round-trips through JSON', () {
+      final inst = DeviceInstance(
+        definition: def,
+        forcedLevel: DrawingLevel.wire,
+      );
+      final restored = DeviceInstance.fromJson(
+        inst.toJson(),
+        resolver: (key) => key == 'inst_test' ? def : null,
+      );
+      expect(restored.forcedLevel, DrawingLevel.wire);
+    });
+
+    test('copyWith preserves forcedLevel by default and can clear it', () {
+      final inst = DeviceInstance(
+        definition: def,
+        forcedLevel: DrawingLevel.symbol,
+      );
+      expect(inst.copyWith(position: Offset.zero).forcedLevel,
+          DrawingLevel.symbol);
+      expect(inst.copyWith(forcedLevel: null).forcedLevel, isNull);
+      expect(inst.copyWith(forcedLevel: DrawingLevel.wire).forcedLevel,
+          DrawingLevel.wire);
+    });
+
+    test('effectiveLevel follows forcedLevel when set', () {
+      final inst = DeviceInstance(definition: def);
+      expect(inst.effectiveLevel(DrawingLevel.symbol), DrawingLevel.symbol);
+      final forced = inst.copyWith(forcedLevel: DrawingLevel.wire);
+      expect(forced.effectiveLevel(DrawingLevel.symbol), DrawingLevel.wire);
+    });
+  });
+
+  // ─── TerminalDef level anchors + delegation ───────────────────────────────
+  group('TerminalDef levelAnchors and delegate', () {
+    test('legacy JSON without new keys loads with defaults', () {
+      final restored = TerminalDef.fromJson({
+        'id': 'L',
+        'label': 'L',
+        'group': 'power',
+        'anchorInConnector': {'dx': 4.0, 'dy': 10.0},
+        'isJumper': false,
+      });
+      expect(restored.levelAnchors, isEmpty);
+      expect(restored.delegate, isNull);
+    });
+
+    test('defaults emit no new JSON keys (byte-stable back-compat)', () {
+      const t = TerminalDef(
+        id: 'L',
+        label: 'L',
+        group: ElectricalGroup.power,
+        anchorInConnector: Offset(4, 10),
+      );
+      final json = t.toJson();
+      expect(json.containsKey('levelAnchors'), isFalse);
+      expect(json.containsKey('delegate'), isFalse);
+    });
+
+    test('levelAnchors and delegate round-trip', () {
+      const original = TerminalDef(
+        id: 'L',
+        label: 'L',
+        group: ElectricalGroup.power,
+        anchorInConnector: Offset(4, 10),
+        levelAnchors: {
+          DrawingLevel.symbol: Offset(130, 20),
+          DrawingLevel.topology: Offset(60, 0),
+        },
+        delegate: TerminalDelegate(refId: 'ref_child', terminalId: 'L'),
+      );
+      final restored = TerminalDef.fromJson(original.toJson());
+      expect(restored, original);
+      expect(restored.levelAnchors[DrawingLevel.symbol], const Offset(130, 20));
+      expect(restored.delegate?.refId, 'ref_child');
+      expect(restored.delegate?.terminalId, 'L');
+    });
+
+    test('equality is independent of levelAnchors insertion order', () {
+      const a = TerminalDef(
+        id: 't',
+        label: 't',
+        group: ElectricalGroup.power,
+        anchorInConnector: Offset.zero,
+        levelAnchors: {
+          DrawingLevel.symbol: Offset(1, 1),
+          DrawingLevel.wire: Offset(2, 2),
+        },
+      );
+      const b = TerminalDef(
+        id: 't',
+        label: 't',
+        group: ElectricalGroup.power,
+        anchorInConnector: Offset.zero,
+        levelAnchors: {
+          DrawingLevel.wire: Offset(2, 2),
+          DrawingLevel.symbol: Offset(1, 1),
+        },
+      );
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+    });
+
+    test('anchorForLevel prefers level override, falls back to base', () {
+      const t = TerminalDef(
+        id: 't',
+        label: 't',
+        group: ElectricalGroup.power,
+        anchorInConnector: Offset(4, 10),
+        levelAnchors: {DrawingLevel.symbol: Offset(130, 20)},
+      );
+      expect(t.anchorForLevel(DrawingLevel.symbol), const Offset(130, 20));
+      expect(t.anchorForLevel(DrawingLevel.wire), const Offset(4, 10));
+    });
+  });
+
+  // ─── LevelAppearance.deviceRefs / DeviceDefinition.isCompositeAt ─────────
+  group('deviceRefs and isCompositeAt', () {
+    test('collects refs at top level and inside nested groups', () {
+      const appearance = LevelAppearance(
+        size: Size(200, 100),
+        drawables: [
+          DrawRect(
+            rect: Rect.fromLTWH(0, 0, 200, 100),
+            fillColor: Color(0xFFFFFFFF),
+            strokeColor: Color(0xFF000000),
+          ),
+          DrawDeviceRef(
+              id: 'ref_a', typeKey: 'child_a', offset: Offset(10, 10)),
+          DrawGroup(
+            offset: Offset(50, 0),
+            scale: 2.0,
+            children: [
+              DrawGroup(
+                offset: Offset(5, 5),
+                children: [
+                  DrawDeviceRef(
+                      id: 'ref_b', typeKey: 'child_b', offset: Offset(1, 1)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final refs = appearance.deviceRefs;
+      expect(refs.length, 2);
+
+      final a = appearance.findDeviceRef('ref_a')!;
+      expect(a.groupOffset, Offset.zero);
+      expect(a.groupScale, 1.0);
+
+      // Outer group: offset (50,0) scale 2; inner group offset (5,5) scale 1
+      // → accumulated offset = (50,0) + (5,5)*2 = (60,10), scale = 2.
+      final b = appearance.findDeviceRef('ref_b')!;
+      expect(b.groupOffset, const Offset(60, 10));
+      expect(b.groupScale, 2.0);
+    });
+
+    test('does not traverse DrawRepeat templates', () {
+      const appearance = LevelAppearance(
+        size: Size(100, 100),
+        drawables: [
+          DrawRepeat(
+            templateChild: DrawDeviceRef(id: 'ref_r', typeKey: 'child_r'),
+            count: '3',
+            spacing: 20,
+          ),
+        ],
+      );
+      expect(appearance.deviceRefs, isEmpty);
+    });
+
+    test('isCompositeAt reflects ref presence per level', () {
+      const def = DeviceDefinition(
+        typeKey: 'assembly',
+        name: 'Assembly',
+        appearance: DeviceAppearance(
+          symbol: LevelAppearance(size: Size(100, 50)),
+          wire: LevelAppearance(
+            size: Size(400, 300),
+            drawables: [
+              DrawDeviceRef(id: 'ref_a', typeKey: 'child_a'),
+            ],
+          ),
+        ),
+      );
+      expect(def.isCompositeAt(DrawingLevel.wire), isTrue);
+      expect(def.isCompositeAt(DrawingLevel.symbol), isFalse);
+      expect(def.isCompositeAt(DrawingLevel.cable), isFalse);
     });
   });
 

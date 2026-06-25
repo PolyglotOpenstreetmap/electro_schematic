@@ -38,6 +38,45 @@ enum ConnectorPlacement {
       ConnectorPlacement.values.byName(name);
 }
 
+// ─── TerminalDelegate ────────────────────────────────────────────────────────
+
+/// Delegates a terminal's geometry to a terminal of a referenced child device.
+///
+/// [refId] is the [DrawableNode.id] of a [DrawDeviceRef] placed in one of the
+/// parent's [LevelAppearance]s; [terminalId] names a terminal on the referenced
+/// child's definition. At drawing levels whose appearance contains that ref
+/// (the "exploded" levels of a composite), the parent terminal resolves to the
+/// child terminal's position; at levels without the ref (the "combined"
+/// levels), the static anchors apply instead.
+class TerminalDelegate {
+  final String refId;
+  final String terminalId;
+
+  const TerminalDelegate({required this.refId, required this.terminalId});
+
+  Map<String, dynamic> toJson() => {
+        'refId': refId,
+        'terminalId': terminalId,
+      };
+
+  factory TerminalDelegate.fromJson(Map<String, dynamic> json) {
+    return TerminalDelegate(
+      refId: json['refId'] as String,
+      terminalId: json['terminalId'] as String,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TerminalDelegate &&
+          refId == other.refId &&
+          terminalId == other.terminalId;
+
+  @override
+  int get hashCode => Object.hash(refId, terminalId);
+}
+
 // ─── TerminalDef ─────────────────────────────────────────────────────────────
 
 /// Definition of a single electrical terminal within a ConnectorDef.
@@ -50,6 +89,20 @@ class TerminalDef {
   /// drawn and from which wires exit.
   final Offset anchorInConnector;
 
+  /// Per-level overrides of [anchorInConnector].
+  ///
+  /// A composite device's external terminal typically sits at a different
+  /// point on its combined glyph than on its exploded layout; this map lets
+  /// the same terminal carry a distinct anchor per [DrawingLevel]. Levels not
+  /// present fall back to [anchorInConnector].
+  final Map<DrawingLevel, Offset> levelAnchors;
+
+  /// Optional delegation of this terminal's geometry to a child device's
+  /// terminal (see [TerminalDelegate]). Takes precedence over the static
+  /// anchors at levels whose appearance contains the referenced
+  /// [DrawDeviceRef].
+  final TerminalDelegate? delegate;
+
   /// True for terminals that carry jumper bridges internally (e.g. U2/V2/W2
   /// in a star-wound motor before star/delta switching).
   final bool isJumper;
@@ -61,9 +114,17 @@ class TerminalDef {
     required this.label,
     required this.group,
     required this.anchorInConnector,
+    this.levelAnchors = const {},
+    this.delegate,
     this.isJumper = false,
     this.description,
   });
+
+  /// Static anchor for [level]: the per-level override when present, the base
+  /// [anchorInConnector] otherwise. Does not follow [delegate] — use
+  /// `TerminalGeometry.resolve` for full delegation-aware resolution.
+  Offset anchorForLevel(DrawingLevel level) =>
+      levelAnchors[level] ?? anchorInConnector;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -73,6 +134,12 @@ class TerminalDef {
           'dx': anchorInConnector.dx,
           'dy': anchorInConnector.dy,
         },
+        if (levelAnchors.isNotEmpty)
+          'levelAnchors': {
+            for (final e in levelAnchors.entries)
+              e.key.name: {'dx': e.value.dx, 'dy': e.value.dy},
+          },
+        if (delegate != null) 'delegate': delegate!.toJson(),
         'isJumper': isJumper,
         if (description != null) 'description': description,
       };
@@ -87,9 +154,29 @@ class TerminalDef {
         (anchor['dx'] as num).toDouble(),
         (anchor['dy'] as num).toDouble(),
       ),
+      levelAnchors: {
+        for (final e
+            in (json['levelAnchors'] as Map<String, dynamic>? ?? const {})
+                .entries)
+          DrawingLevel.fromJson(e.key): Offset(
+            ((e.value as Map<String, dynamic>)['dx'] as num).toDouble(),
+            ((e.value as Map<String, dynamic>)['dy'] as num).toDouble(),
+          ),
+      },
+      delegate: json['delegate'] != null
+          ? TerminalDelegate.fromJson(json['delegate'] as Map<String, dynamic>)
+          : null,
       isJumper: json['isJumper'] as bool? ?? false,
       description: json['description'] as String?,
     );
+  }
+
+  bool _mapEquals(Map<DrawingLevel, Offset> a, Map<DrawingLevel, Offset> b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (a[key] != b[key]) return false;
+    }
+    return true;
   }
 
   @override
@@ -100,12 +187,22 @@ class TerminalDef {
           label == other.label &&
           group == other.group &&
           anchorInConnector == other.anchorInConnector &&
+          _mapEquals(levelAnchors, other.levelAnchors) &&
+          delegate == other.delegate &&
           isJumper == other.isJumper &&
           description == other.description;
 
   @override
-  int get hashCode => Object.hash(id, label, group, anchorInConnector,
-      isJumper, description);
+  int get hashCode => Object.hash(
+      id,
+      label,
+      group,
+      anchorInConnector,
+      Object.hashAllUnordered(
+          levelAnchors.entries.map((e) => Object.hash(e.key, e.value))),
+      delegate,
+      isJumper,
+      description);
 }
 
 // ─── ConnectorDef ────────────────────────────────────────────────────────────
@@ -160,7 +257,28 @@ class ConnectorDef {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, placement, Object.hashAll(terminals));
+  int get hashCode =>
+      Object.hash(id, name, placement, Object.hashAll(terminals));
+}
+
+// ─── ResolvedDeviceRef ───────────────────────────────────────────────────────
+
+/// A [DrawDeviceRef] found in a [LevelAppearance], together with the offset
+/// and scale accumulated from any enclosing [DrawGroup]s.
+///
+/// A point `p` in the referenced child's coordinates maps into the parent
+/// device's coordinates as
+/// `groupOffset + (ref.offset + p * ref.scale) * groupScale`.
+class ResolvedDeviceRef {
+  final DrawDeviceRef ref;
+  final Offset groupOffset;
+  final double groupScale;
+
+  const ResolvedDeviceRef({
+    required this.ref,
+    this.groupOffset = Offset.zero,
+    this.groupScale = 1.0,
+  });
 }
 
 // ─── LevelAppearance ─────────────────────────────────────────────────────────
@@ -174,6 +292,40 @@ class LevelAppearance {
     required this.size,
     this.drawables = const [],
   });
+
+  /// All [DrawDeviceRef]s in [drawables], including those nested inside
+  /// [DrawGroup]s (with the groups' offset/scale accumulated).
+  ///
+  /// `showIf` conditions are ignored — collection is structural, not
+  /// parameter-dependent. [DrawRepeat] templates are not traversed.
+  List<ResolvedDeviceRef> get deviceRefs {
+    final result = <ResolvedDeviceRef>[];
+    void walk(List<DrawableNode> nodes, Offset offset, double scale) {
+      for (final node in nodes) {
+        switch (node) {
+          case DrawDeviceRef():
+            result.add(ResolvedDeviceRef(
+                ref: node, groupOffset: offset, groupScale: scale));
+          case DrawGroup():
+            walk(node.children, offset + (node.offset ?? Offset.zero) * scale,
+                scale * node.scale);
+          default:
+            break;
+        }
+      }
+    }
+
+    walk(drawables, Offset.zero, 1.0);
+    return result;
+  }
+
+  /// Finds the [DrawDeviceRef] with [DrawableNode.id] == [refId], or null.
+  ResolvedDeviceRef? findDeviceRef(String refId) {
+    for (final r in deviceRefs) {
+      if (r.ref.id == refId) return r;
+    }
+    return null;
+  }
 
   Map<String, dynamic> toJson() => {
         'size': {'width': size.width, 'height': size.height},
@@ -314,6 +466,12 @@ class DeviceDefinition {
   Map<String, dynamic> get defaultParams =>
       {for (final p in parameters) p.id: p.defaultValue};
 
+  /// Whether the appearance for [level] contains [DrawDeviceRef]s — i.e.
+  /// whether this device renders "exploded" into child devices at that level
+  /// (as opposed to a combined glyph of plain drawables).
+  bool isCompositeAt(DrawingLevel level) =>
+      appearance.forLevel(level)?.deviceRefs.isNotEmpty ?? false;
+
   Map<String, dynamic> toJson() => {
         'typeKey': typeKey,
         'name': name,
@@ -334,8 +492,8 @@ class DeviceDefinition {
       connectors: (json['connectors'] as List? ?? [])
           .map((c) => ConnectorDef.fromJson(c as Map<String, dynamic>))
           .toList(),
-      appearance: DeviceAppearance.fromJson(
-          json['appearance'] as Map<String, dynamic>),
+      appearance:
+          DeviceAppearance.fromJson(json['appearance'] as Map<String, dynamic>),
     );
   }
 
@@ -359,9 +517,6 @@ class DeviceDefinition {
   }
 
   @override
-  int get hashCode => Object.hash(
-      typeKey, name, description,
-      Object.hashAll(parameters),
-      Object.hashAll(connectors),
-      appearance);
+  int get hashCode => Object.hash(typeKey, name, description,
+      Object.hashAll(parameters), Object.hashAll(connectors), appearance);
 }

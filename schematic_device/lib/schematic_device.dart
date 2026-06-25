@@ -24,6 +24,7 @@ export 'src/drawable/terminal_color_binding.dart';
 // ── Rendering ─────────────────────────────────────────────────────────────────
 export 'src/rendering/device_renderer.dart';
 export 'src/rendering/render_context.dart';
+export 'src/rendering/terminal_geometry.dart';
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 import 'src/drawable/drawable_registry.dart';

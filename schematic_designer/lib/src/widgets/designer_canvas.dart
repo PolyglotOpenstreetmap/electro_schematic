@@ -64,8 +64,8 @@ class _DesignerCanvasState extends State<DesignerCanvas> {
               onPanStart: (details) {
                 if (widget.activePaletteType != null) return;
                 final devicePos = _toDeviceCoords(details.localPosition);
-                final hit = NodeBoundsHelper.hitTest(
-                    state.drawables, devicePos, definition);
+                final hit = NodeBoundsHelper.hitTest(state.drawables, devicePos,
+                    definition, widget.notifier.resolver, state.activeLevel);
                 if (hit?.id != null) {
                   _draggingId = hit!.id;
                   _dragStartDevicePos = devicePos;
@@ -78,8 +78,7 @@ class _DesignerCanvasState extends State<DesignerCanvas> {
                 final start = _dragStartDevicePos;
                 if (id == null || start == null) return;
                 _didDrag = true;
-                final currentDevicePos =
-                    _toDeviceCoords(details.localPosition);
+                final currentDevicePos = _toDeviceCoords(details.localPosition);
                 final totalDelta = currentDevicePos - start;
                 widget.notifier.updateDrag(id, totalDelta);
               },
@@ -107,10 +106,10 @@ class _DesignerCanvasState extends State<DesignerCanvas> {
               bottom: 8,
               child: _ZoomControls(
                 zoom: _zoom,
-                onZoomIn: () => setState(
-                    () => _zoom = math.min(8.0, _zoom + 0.5)),
-                onZoomOut: () => setState(
-                    () => _zoom = math.max(0.5, _zoom - 0.5)),
+                onZoomIn: () =>
+                    setState(() => _zoom = math.min(8.0, _zoom + 0.5)),
+                onZoomOut: () =>
+                    setState(() => _zoom = math.max(0.5, _zoom - 0.5)),
               ),
             ),
           ],
@@ -224,6 +223,11 @@ class _CanvasPainter extends CustomPainter {
       context: renderContext,
     );
 
+    // Facade-terminal overlay: ring + id label at each terminal's resolved
+    // position for the active level (static anchor on combined levels,
+    // delegated child position on exploded levels).
+    _drawTerminalOverlay(canvas);
+
     // Selection highlight
     final selectedId = state.selectedId as String?;
     if (selectedId != null) {
@@ -231,6 +235,38 @@ class _CanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  void _drawTerminalOverlay(Canvas canvas) {
+    final level = state.activeLevel as DrawingLevel;
+    final ringPaint = Paint()
+      ..color = const Color(0xCCE65100) // deep orange
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 / zoom;
+
+    for (final terminal in definition.allTerminals) {
+      final pos = TerminalGeometry.resolve(
+        definition: definition,
+        terminalId: terminal.id,
+        level: level,
+        resolver: renderContext.deviceResolver,
+      );
+      if (pos == null) continue;
+      canvas.drawCircle(pos, 6.0 / zoom, ringPaint);
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: terminal.id,
+          style: TextStyle(
+            fontSize: 7.0 / zoom,
+            color: const Color(0xCCE65100),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, pos + Offset(7.0 / zoom, -tp.height / 2));
+    }
   }
 
   void _drawOuterGrid(Canvas canvas, Size size) {
@@ -268,8 +304,7 @@ class _CanvasPainter extends CustomPainter {
     _drawDashedPath(canvas, Path()..addRect(rect), paint, dashLen, gapLen);
   }
 
-  void _drawSelectionHighlight(
-      Canvas canvas, String id, DeviceDefinition def) {
+  void _drawSelectionHighlight(Canvas canvas, String id, DeviceDefinition def) {
     final drawables = state.drawables as List<DrawableNode>;
     DrawableNode? node;
     for (final d in drawables) {
@@ -280,7 +315,8 @@ class _CanvasPainter extends CustomPainter {
     }
     if (node == null) return;
 
-    final bounds = NodeBoundsHelper.boundsOf(node, def);
+    final bounds = NodeBoundsHelper.boundsOf(node, def,
+        renderContext.deviceResolver, state.activeLevel as DrawingLevel);
     if (bounds == null) return;
 
     final highlightRect = bounds.inflate(3);
@@ -288,8 +324,7 @@ class _CanvasPainter extends CustomPainter {
       ..color = const Color(0xFF1565C0)
       ..strokeWidth = 1.0 / zoom
       ..style = PaintingStyle.stroke;
-    _drawDashedPath(
-        canvas, Path()..addRect(highlightRect), paint, 5.0, 3.0);
+    _drawDashedPath(canvas, Path()..addRect(highlightRect), paint, 5.0, 3.0);
 
     // Corner circles
     final dotPaint = Paint()
@@ -306,8 +341,8 @@ class _CanvasPainter extends CustomPainter {
     }
   }
 
-  void _drawDashedPath(Canvas canvas, Path path, Paint paint,
-      double dashLength, double gapLength) {
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint, double dashLength,
+      double gapLength) {
     final metrics = path.computeMetrics();
     for (final metric in metrics) {
       double distance = 0;
@@ -326,7 +361,5 @@ class _CanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CanvasPainter old) =>
-      old.state != state ||
-      old.definition != definition ||
-      old.zoom != zoom;
+      old.state != state || old.definition != definition || old.zoom != zoom;
 }

@@ -18,11 +18,18 @@ class DesignerNotifier extends ChangeNotifier {
   DesignerNotifier(
     DesignerState initial, {
     DeviceDefinition? Function(String typeKey)? resolver,
+    List<String> knownTypeKeys = const [],
   })  : _history = DesignerHistory(initial),
-        _resolver = resolver;
+        _resolver = resolver,
+        knownTypeKeys = List.unmodifiable(knownTypeKeys);
 
   final DesignerHistory _history;
   final DeviceDefinition? Function(String typeKey)? _resolver;
+
+  /// Type keys offered by the device-ref palette tool.  The resolver is a
+  /// lookup function and cannot be enumerated, so hosts that want device-ref
+  /// authoring must pass the placeable keys explicitly.
+  final List<String> knownTypeKeys;
   int _idCounter = 0;
 
   // Drag state
@@ -35,6 +42,10 @@ class DesignerNotifier extends ChangeNotifier {
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
 
+  /// The injected device resolver, if any (used for composite preview,
+  /// ref bounds, and delegation editing).
+  DeviceDefinition? Function(String typeKey)? get resolver => _resolver;
+
   /// A [RenderContext] that uses this notifier's resolver, if one was provided.
   RenderContext get renderContext {
     final resolver = _resolver;
@@ -42,6 +53,14 @@ class DesignerNotifier extends ChangeNotifier {
         ? RenderContext(deviceResolver: resolver)
         : RenderContext.empty;
   }
+
+  /// All [DrawDeviceRef]s with ids, collected across every populated level —
+  /// the candidate targets for [TerminalDelegate.refId].
+  List<DrawDeviceRef> get delegatableRefs => [
+        for (final appearance in state.appearances.values)
+          for (final resolved in appearance.deviceRefs)
+            if (resolved.ref.id != null) resolved.ref,
+      ];
 
   // ─── Private helper: update active level's drawables ─────────────────────
 
@@ -92,10 +111,9 @@ class DesignerNotifier extends ChangeNotifier {
 
   void removeNode(String id) {
     final newDrawables = state.drawables.where((d) => d.id != id).toList();
-    final newSelected =
-        state.selectedId == id ? null : state.selectedId;
-    _history.push(_withActiveDrawables(newDrawables)
-        .copyWith(selectedId: newSelected));
+    final newSelected = state.selectedId == id ? null : state.selectedId;
+    _history.push(
+        _withActiveDrawables(newDrawables).copyWith(selectedId: newSelected));
     notifyListeners();
   }
 
@@ -145,18 +163,15 @@ class DesignerNotifier extends ChangeNotifier {
   /// mutation).
   void setActiveLevel(DrawingLevel level) {
     if (state.activeLevel == level) return;
-    _history.updateSilent(
-        state.copyWith(activeLevel: level, selectedId: null));
+    _history.updateSilent(state.copyWith(activeLevel: level, selectedId: null));
     notifyListeners();
   }
 
   /// Adds a new empty level.  No-op if the level already exists.
   void addLevel(DrawingLevel level, {Size? size}) {
     if (state.appearances.containsKey(level)) return;
-    final newApps =
-        Map<DrawingLevel, LevelAppearance>.from(state.appearances)
-          ..[level] =
-              LevelAppearance(size: size ?? const Size(100, 100));
+    final newApps = Map<DrawingLevel, LevelAppearance>.from(state.appearances)
+      ..[level] = LevelAppearance(size: size ?? const Size(100, 100));
     _history.push(state.copyWith(appearances: newApps));
     notifyListeners();
   }
@@ -165,14 +180,11 @@ class DesignerNotifier extends ChangeNotifier {
   /// least one level).
   void removeLevel(DrawingLevel level) {
     if (state.appearances.length <= 1) return;
-    final newApps =
-        Map<DrawingLevel, LevelAppearance>.from(state.appearances)
-          ..remove(level);
-    final newActive = state.activeLevel == level
-        ? newApps.keys.first
-        : state.activeLevel;
-    _history.push(
-        state.copyWith(appearances: newApps, activeLevel: newActive));
+    final newApps = Map<DrawingLevel, LevelAppearance>.from(state.appearances)
+      ..remove(level);
+    final newActive =
+        state.activeLevel == level ? newApps.keys.first : state.activeLevel;
+    _history.push(state.copyWith(appearances: newApps, activeLevel: newActive));
     notifyListeners();
   }
 
@@ -186,10 +198,9 @@ class DesignerNotifier extends ChangeNotifier {
     final copied = src.drawables
         .map((n) => DrawableNodeFactory.fromJson(n.toJson()))
         .toList();
-    final newApps =
-        Map<DrawingLevel, LevelAppearance>.from(state.appearances)
-          ..[to] = LevelAppearance(
-              size: src.size, drawables: List.unmodifiable(copied));
+    final newApps = Map<DrawingLevel, LevelAppearance>.from(state.appearances)
+      ..[to] =
+          LevelAppearance(size: src.size, drawables: List.unmodifiable(copied));
     _history.push(state.copyWith(appearances: newApps));
     notifyListeners();
   }
@@ -199,9 +210,8 @@ class DesignerNotifier extends ChangeNotifier {
     final current = state.appearances[level];
     if (current == null) return;
     final updated = LevelAppearance(size: size, drawables: current.drawables);
-    final newApps =
-        Map<DrawingLevel, LevelAppearance>.from(state.appearances)
-          ..[level] = updated;
+    final newApps = Map<DrawingLevel, LevelAppearance>.from(state.appearances)
+      ..[level] = updated;
     _history.push(state.copyWith(appearances: newApps));
     notifyListeners();
   }
@@ -211,8 +221,7 @@ class DesignerNotifier extends ChangeNotifier {
   /// Adds [param].  Rejects duplicates (same [ParameterDef.id]).
   void addParameter(ParameterDef param) {
     if (state.parameters.any((p) => p.id == param.id)) return;
-    _history.push(
-        state.copyWith(parameters: [...state.parameters, param]));
+    _history.push(state.copyWith(parameters: [...state.parameters, param]));
     notifyListeners();
   }
 
@@ -236,8 +245,7 @@ class DesignerNotifier extends ChangeNotifier {
 
   /// Appends [connector].
   void addConnector(ConnectorDef connector) {
-    _history.push(state.copyWith(
-        connectors: [...state.connectors, connector]));
+    _history.push(state.copyWith(connectors: [...state.connectors, connector]));
     notifyListeners();
   }
 
@@ -253,15 +261,14 @@ class DesignerNotifier extends ChangeNotifier {
   /// Removes the connector with [id].
   void removeConnector(String id) {
     _history.push(state.copyWith(
-        connectors:
-            state.connectors.where((c) => c.id != id).toList()));
+        connectors: state.connectors.where((c) => c.id != id).toList()));
     notifyListeners();
   }
 
   /// Appends [terminal] to the connector identified by [connectorId].
   void addTerminal(String connectorId, TerminalDef terminal) {
-    final list = _replaceConnectorTerminals(
-        connectorId, (ts) => [...ts, terminal]);
+    final list =
+        _replaceConnectorTerminals(connectorId, (ts) => [...ts, terminal]);
     if (list == null) return;
     _history.push(state.copyWith(connectors: list));
     notifyListeners();
@@ -278,30 +285,155 @@ class DesignerNotifier extends ChangeNotifier {
 
   /// Removes the terminal with [terminalId] from the connector [connectorId].
   void removeTerminal(String connectorId, String terminalId) {
-    final list = _replaceConnectorTerminals(connectorId,
-        (ts) => ts.where((t) => t.id != terminalId).toList());
+    final list = _replaceConnectorTerminals(
+        connectorId, (ts) => ts.where((t) => t.id != terminalId).toList());
     if (list == null) return;
     _history.push(state.copyWith(connectors: list));
     notifyListeners();
   }
 
-  /// Updates [TerminalDef.anchorInConnector] for a specific terminal.
+  /// Moves a terminal's anchor.
+  ///
+  /// When the terminal carries a [TerminalDef.levelAnchors] override for the
+  /// active level, that override is updated; otherwise the base
+  /// [TerminalDef.anchorInConnector] moves.
   void moveTerminalAnchor(
       String connectorId, String terminalId, Offset newAnchor) {
-    final list = _replaceConnectorTerminals(connectorId, (ts) => ts.map((t) {
-          if (t.id != terminalId) return t;
-          final j = {
-            ...t.toJson(),
-            'anchorInConnector': {
-              'dx': newAnchor.dx,
-              'dy': newAnchor.dy,
-            },
-          };
-          return TerminalDef.fromJson(j);
-        }).toList());
+    final list = _replaceConnectorTerminals(
+        connectorId,
+        (ts) => ts.map((t) {
+              if (t.id != terminalId) return t;
+              if (t.levelAnchors.containsKey(state.activeLevel)) {
+                return _terminalWith(t, levelAnchors: {
+                  ...t.levelAnchors,
+                  state.activeLevel: newAnchor,
+                });
+              }
+              return _terminalWith(t, anchorInConnector: newAnchor);
+            }).toList());
     if (list == null) return;
     _history.push(state.copyWith(connectors: list));
     notifyListeners();
+  }
+
+  /// Sets or clears (null) the [TerminalDef.delegate] of a terminal.
+  void setTerminalDelegate(
+      String connectorId, String terminalId, TerminalDelegate? delegate) {
+    final list = _replaceConnectorTerminals(
+        connectorId,
+        (ts) => ts
+            .map((t) =>
+                t.id == terminalId ? _terminalWith(t, delegate: delegate) : t)
+            .toList());
+    if (list == null) return;
+    _history.push(state.copyWith(connectors: list));
+    notifyListeners();
+  }
+
+  /// Sets ([anchor] non-null) or removes ([anchor] null) the per-level anchor
+  /// override of a terminal for [level].
+  void setTerminalLevelAnchor(String connectorId, String terminalId,
+      DrawingLevel level, Offset? anchor) {
+    final list = _replaceConnectorTerminals(
+        connectorId,
+        (ts) => ts.map((t) {
+              if (t.id != terminalId) return t;
+              final anchors = Map<DrawingLevel, Offset>.from(t.levelAnchors);
+              if (anchor == null) {
+                anchors.remove(level);
+              } else {
+                anchors[level] = anchor;
+              }
+              return _terminalWith(t, levelAnchors: anchors);
+            }).toList());
+    if (list == null) return;
+    _history.push(state.copyWith(connectors: list));
+    notifyListeners();
+  }
+
+  static const Object _unsetDelegate = Object();
+
+  /// Field-wise copy of a [TerminalDef]; [delegate] uses a sentinel so it can
+  /// be explicitly cleared with null.
+  TerminalDef _terminalWith(
+    TerminalDef t, {
+    Offset? anchorInConnector,
+    Map<DrawingLevel, Offset>? levelAnchors,
+    Object? delegate = _unsetDelegate,
+  }) {
+    return TerminalDef(
+      id: t.id,
+      label: t.label,
+      group: t.group,
+      anchorInConnector: anchorInConnector ?? t.anchorInConnector,
+      levelAnchors: levelAnchors ?? t.levelAnchors,
+      delegate: identical(delegate, _unsetDelegate)
+          ? t.delegate
+          : delegate as TerminalDelegate?,
+      isJumper: t.isJumper,
+      description: t.description,
+    );
+  }
+
+  /// Palette "Terminal" tool: creates a [TerminalDef] anchored at [pos] (in a
+  /// `default` connector, created on demand) AND a bound [DrawTerminalAnchor]
+  /// drawable on the active level — one history entry for the whole gesture.
+  void addTerminalWithAnchor(Offset pos) {
+    // Unique terminal id across all connectors: t1, t2, …
+    final existing = {
+      for (final c in state.connectors) ...c.terminals.map((t) => t.id)
+    };
+    var n = 1;
+    while (existing.contains('t$n')) {
+      n++;
+    }
+    final terminalId = 't$n';
+
+    final terminal = TerminalDef(
+      id: terminalId,
+      label: terminalId.toUpperCase(),
+      group: ElectricalGroup.power,
+      anchorInConnector: pos,
+    );
+
+    final List<ConnectorDef> connectors;
+    if (state.connectors.isEmpty) {
+      connectors = [
+        ConnectorDef(
+          id: 'default',
+          name: 'Default',
+          placement: ConnectorPlacement.left,
+          terminals: [terminal],
+        ),
+      ];
+    } else {
+      final first = state.connectors.first;
+      connectors = [
+        ConnectorDef(
+          id: first.id,
+          name: first.name,
+          placement: first.placement,
+          terminals: [...first.terminals, terminal],
+        ),
+        ...state.connectors.skip(1),
+      ];
+    }
+
+    final anchorNode = DrawTerminalAnchor(
+      id: 'n${_idCounter++}',
+      terminalDefId: terminalId,
+      colorBinding: TerminalColorBinding.standard(terminalId),
+    );
+
+    _history.push(_withActiveDrawables([...state.drawables, anchorNode])
+        .copyWith(connectors: connectors, selectedId: anchorNode.id));
+    notifyListeners();
+  }
+
+  /// Palette "Device ref" tool: places a [DrawDeviceRef] to [typeKey] at
+  /// [pos], inheriting the active level.
+  void addDeviceRef(String typeKey, Offset pos) {
+    addNode(DrawDeviceRef(typeKey: typeKey, offset: pos));
   }
 
   /// Returns a new connector list with the terminals of [connectorId] replaced

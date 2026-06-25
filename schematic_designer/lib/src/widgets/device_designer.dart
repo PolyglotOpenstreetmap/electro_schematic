@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../notifier/designer_notifier.dart';
 import '../utils/node_bounds.dart';
+import 'connectors_panel.dart';
 import 'designer_canvas.dart';
 import 'level_switcher.dart';
 import 'node_list.dart';
@@ -28,20 +29,61 @@ class DeviceDesigner extends StatefulWidget {
 
 class _DeviceDesignerState extends State<DeviceDesigner> {
   String? _activePaletteType;
+  int _leftPanelTab = 0; // 0 = nodes, 1 = connectors
 
   DesignerNotifier get _notifier => widget.notifier;
 
-  void _onCanvasTap(Offset deviceLocalPos) {
-    if (_activePaletteType != null) {
-      final node = _defaultNodeForType(_activePaletteType!, deviceLocalPos);
-      if (node != null) _notifier.addNode(node);
-      setState(() => _activePaletteType = null);
+  Future<void> _onCanvasTap(Offset deviceLocalPos) async {
+    final paletteType = _activePaletteType;
+    if (paletteType != null) {
+      switch (paletteType) {
+        case 'terminal':
+          _notifier.addTerminalWithAnchor(deviceLocalPos);
+        case 'deviceRef':
+          final typeKey = await _pickDeviceRefTypeKey();
+          if (typeKey != null) {
+            _notifier.addDeviceRef(typeKey, deviceLocalPos);
+          }
+        default:
+          final node = _defaultNodeForType(paletteType, deviceLocalPos);
+          if (node != null) _notifier.addNode(node);
+      }
+      if (mounted) setState(() => _activePaletteType = null);
     } else {
       final definition = _notifier.exportDefinition();
       final hit = NodeBoundsHelper.hitTest(
-          _notifier.state.drawables, deviceLocalPos, definition);
+          _notifier.state.drawables,
+          deviceLocalPos,
+          definition,
+          _notifier.resolver,
+          _notifier.state.activeLevel);
       _notifier.selectNode(hit?.id);
     }
+  }
+
+  Future<String?> _pickDeviceRefTypeKey() async {
+    final keys = _notifier.knownTypeKeys;
+    if (keys.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+        content: Text('No placeable device types — construct the '
+            'DesignerNotifier with knownTypeKeys.'),
+      ));
+      return null;
+    }
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Place device reference',
+            style: TextStyle(fontSize: 14)),
+        children: [
+          for (final key in keys)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(key),
+              child: Text(key, style: const TextStyle(fontSize: 12)),
+            ),
+        ],
+      ),
+    );
   }
 
   dynamic _defaultNodeForType(String type, Offset pos) {
@@ -54,6 +96,37 @@ class _DeviceDesignerState extends State<DeviceDesigner> {
       'capacitor' => _notifier.defaultCapacitor(pos),
       _ => null,
     };
+  }
+
+  Widget _leftTab(String label, int index) {
+    final selected = _leftPanelTab == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _leftPanelTab = index),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: selected
+              ? BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                        color: Theme.of(context).colorScheme.primary, width: 2),
+                  ),
+                )
+              : null,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.black54,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -102,7 +175,7 @@ class _DeviceDesignerState extends State<DeviceDesigner> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Left panel: node list
+                          // Left panel: nodes / connectors tabs
                           SizedBox(
                             width: 220,
                             child: Column(
@@ -111,18 +184,18 @@ class _DeviceDesignerState extends State<DeviceDesigner> {
                                 Container(
                                   height: 28,
                                   color: Colors.grey.shade200,
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8),
-                                  child: const Text(
-                                    'NODES',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1),
+                                  child: Row(
+                                    children: [
+                                      _leftTab('NODES', 0),
+                                      _leftTab('CONNECTORS', 1),
+                                    ],
                                   ),
                                 ),
-                                Expanded(child: NodeList(notifier: _notifier)),
+                                Expanded(
+                                  child: _leftPanelTab == 0
+                                      ? NodeList(notifier: _notifier)
+                                      : ConnectorsPanel(notifier: _notifier),
+                                ),
                               ],
                             ),
                           ),
@@ -216,13 +289,41 @@ class _DesignerToolbar extends StatelessWidget {
             listenable: notifier,
             builder: (_, __) => Text(
               notifier.state.deviceName,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
           const SizedBox(width: 12),
           // Level switcher
           LevelSwitcher(notifier: notifier),
+          const SizedBox(width: 8),
+          // Combined / exploded badge for the active level
+          ListenableBuilder(
+            listenable: notifier,
+            builder: (context, _) {
+              final isExploded = notifier.state
+                      .appearanceFor(notifier.state.activeLevel)
+                      ?.deviceRefs
+                      .isNotEmpty ??
+                  false;
+              return Tooltip(
+                message: isExploded
+                    ? 'This level contains device refs — it renders the '
+                        'assembly exploded into its components'
+                    : 'This level renders as a combined glyph',
+                child: Chip(
+                  visualDensity: VisualDensity.compact,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  label: Text(
+                    isExploded ? 'exploded' : 'combined',
+                    style: const TextStyle(fontSize: 9),
+                  ),
+                  backgroundColor: isExploded
+                      ? Colors.orange.shade50
+                      : Colors.blueGrey.shade50,
+                ),
+              );
+            },
+          ),
           const SizedBox(width: 12),
           // Palette
           NodePalette(
@@ -236,8 +337,7 @@ class _DesignerToolbar extends StatelessWidget {
             builder: (_, __) => IconButton(
               icon: const Icon(Icons.undo),
               tooltip: 'Undo (Ctrl+Z)',
-              onPressed:
-                  notifier.canUndo ? () => notifier.undo() : null,
+              onPressed: notifier.canUndo ? () => notifier.undo() : null,
             ),
           ),
           // Redo
@@ -246,8 +346,7 @@ class _DesignerToolbar extends StatelessWidget {
             builder: (_, __) => IconButton(
               icon: const Icon(Icons.redo),
               tooltip: 'Redo (Ctrl+Y)',
-              onPressed:
-                  notifier.canRedo ? () => notifier.redo() : null,
+              onPressed: notifier.canRedo ? () => notifier.redo() : null,
             ),
           ),
         ],

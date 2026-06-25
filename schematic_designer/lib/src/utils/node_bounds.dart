@@ -9,9 +9,19 @@ abstract final class NodeBoundsHelper {
   /// Returns approximate bounding rect in device-local coords, or null.
   ///
   /// Returns null for types whose bounds cannot be cheaply computed
-  /// (DrawPath, DrawRepeat) or that depend on external state not available
-  /// here without a definition.
-  static Rect? boundsOf(DrawableNode node, [DeviceDefinition? definition]) {
+  /// (DrawPath) or that depend on external state not available here without
+  /// a definition.
+  ///
+  /// [resolver] and [level] enable bounds for [DrawDeviceRef] (size of the
+  /// referenced definition's appearance at `ref.level ?? level`) and
+  /// level-aware [DrawTerminalAnchor] positions. Without a resolver a ref
+  /// still gets a small fallback box so it stays selectable/draggable.
+  static Rect? boundsOf(
+    DrawableNode node, [
+    DeviceDefinition? definition,
+    DeviceResolver? resolver,
+    DrawingLevel? level,
+  ]) {
     return switch (node) {
       DrawRect() => node.rect.inflate(node.strokeWidth / 2),
       DrawCircle() => Rect.fromCircle(
@@ -31,11 +41,11 @@ abstract final class NodeBoundsHelper {
           center: node.center,
           radius: (8 + 10) * node.scale,
         ),
-      DrawTerminalAnchor() => _terminalAnchorBounds(node, definition),
-      DrawGroup() => _groupBounds(node, definition),
-      DrawRepeat() => null, // complex
+      DrawTerminalAnchor() => _terminalAnchorBounds(node, definition, level),
+      DrawGroup() => _groupBounds(node, definition, resolver, level),
+      DrawRepeat() => boundsOf(node.templateChild, definition, resolver, level),
       DrawPath() => null, // SVG too complex
-      DrawDeviceRef() => null, // bounds depend on external registry
+      DrawDeviceRef() => _deviceRefBounds(node, resolver, level),
     };
   }
 
@@ -45,10 +55,12 @@ abstract final class NodeBoundsHelper {
     List<DrawableNode> nodes,
     Offset point, [
     DeviceDefinition? definition,
+    DeviceResolver? resolver,
+    DrawingLevel? level,
   ]) {
     // Iterate in reverse so the topmost (last drawn) node wins.
     for (var i = nodes.length - 1; i >= 0; i--) {
-      final bounds = boundsOf(nodes[i], definition);
+      final bounds = boundsOf(nodes[i], definition, resolver, level);
       if (bounds != null && bounds.contains(point)) {
         return nodes[i];
       }
@@ -76,27 +88,49 @@ abstract final class NodeBoundsHelper {
         .inflate(_max(node.strokeWidth, 4.0));
   }
 
-  static Rect? _terminalAnchorBounds(
-      DrawTerminalAnchor node, DeviceDefinition? definition) {
+  static Rect? _terminalAnchorBounds(DrawTerminalAnchor node,
+      DeviceDefinition? definition, DrawingLevel? level) {
     if (definition == null) return null;
     final terminal = definition.findTerminal(node.terminalDefId);
     if (terminal == null) return null;
+    final anchor = level != null
+        ? terminal.anchorForLevel(level)
+        : terminal.anchorInConnector;
     return Rect.fromCircle(
-      center: terminal.anchorInConnector,
+      center: anchor,
       radius: node.radius + 2,
     );
   }
 
-  static Rect? _groupBounds(DrawGroup node, DeviceDefinition? definition) {
+  static Rect? _groupBounds(DrawGroup node, DeviceDefinition? definition,
+      DeviceResolver? resolver, DrawingLevel? level) {
     Rect? result;
     final groupOffset = node.offset ?? Offset.zero;
 
     for (final child in node.children) {
-      final childBounds = boundsOf(child, definition);
+      final childBounds = boundsOf(child, definition, resolver, level);
       if (childBounds == null) continue;
       final translated = childBounds.translate(groupOffset.dx, groupOffset.dy);
       result = result == null ? translated : result.expandToInclude(translated);
     }
     return result;
+  }
+
+  static Rect _deviceRefBounds(
+      DrawDeviceRef node, DeviceResolver? resolver, DrawingLevel? level) {
+    final refDef = resolver?.call(node.typeKey);
+    final size = refDef?.appearance
+        .forLevel(node.level ?? level ?? DrawingLevel.wire)
+        ?.size;
+    if (size == null) {
+      // Unresolved ref: small fallback box so it remains selectable.
+      return Rect.fromLTWH(node.offset.dx, node.offset.dy, 24, 24);
+    }
+    return Rect.fromLTWH(
+      node.offset.dx,
+      node.offset.dy,
+      size.width * node.scale,
+      size.height * node.scale,
+    );
   }
 }

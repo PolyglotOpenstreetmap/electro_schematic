@@ -74,9 +74,18 @@ class _DesignerHomePageState extends State<_DesignerHomePage> {
   DesignerNotifier _makeNotifier(_MotorPreset preset) {
     final def = _buildDef(preset);
     // Start at the wire level so the terminal-block view is immediately visible.
-    final state = DesignerState.fromDefinition(def,
-        initialLevel: DrawingLevel.wire);
-    return DesignerNotifier(state);
+    final state =
+        DesignerState.fromDefinition(def, initialLevel: DrawingLevel.wire);
+    // Resolver + knownTypeKeys enable composite authoring: the Device-ref
+    // palette tool, ref bounds/preview, and the "Delegates to" editor.
+    final registry = {
+      for (final p in _MotorPreset.values) _buildDef(p).typeKey: _buildDef(p),
+    };
+    return DesignerNotifier(
+      state,
+      resolver: (key) => registry[key],
+      knownTypeKeys: registry.keys.toList(),
+    );
   }
 
   void _selectPreset(_MotorPreset preset) {
@@ -218,7 +227,8 @@ class _PreviewPaneState extends State<_PreviewPane> {
               const Spacer(),
               TextButton.icon(
                 onPressed: _exportJson,
-                icon: const Icon(Icons.download, size: 15, color: Colors.white70),
+                icon:
+                    const Icon(Icons.download, size: 15, color: Colors.white70),
                 label: const Text('Export JSON',
                     style: TextStyle(color: Colors.white70, fontSize: 11)),
               ),
@@ -394,9 +404,7 @@ class _LabelledPreview extends StatelessWidget {
       children: [
         Text(label,
             style: const TextStyle(
-                fontSize: 10,
-                color: Colors.grey,
-                fontWeight: FontWeight.w600)),
+                fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Container(
           decoration: BoxDecoration(

@@ -35,13 +35,18 @@ class DeviceRenderer {
   ///   the appearance drawables.
   ///
   /// Recursion is bounded by [RenderContext.maxDepth] (default 8).
+  ///
+  /// When [DeviceInstance.forcedLevel] is set, the instance renders at that
+  /// level instead of [level] (per-instance force-expand/collapse of
+  /// composites).
   void render(
     Canvas canvas,
     DeviceInstance instance, {
     DrawingLevel level = DrawingLevel.wire,
     RenderContext context = RenderContext.empty,
   }) {
-    final appearance = instance.definition.appearance.forLevel(level);
+    final effectiveLevel = instance.effectiveLevel(level);
+    final appearance = instance.definition.appearance.forLevel(effectiveLevel);
 
     // Nothing to do if there is no appearance for this level and no children.
     if (appearance == null && instance.children.isEmpty) return;
@@ -55,7 +60,7 @@ class DeviceRenderer {
     // Template-path: render drawables declared in the LevelAppearance.
     if (appearance != null) {
       for (final node in appearance.drawables) {
-        _renderNode(canvas, node, params, instance, context, level);
+        _renderNode(canvas, node, params, instance, context, effectiveLevel);
       }
     }
 
@@ -68,7 +73,7 @@ class DeviceRenderer {
         render(
           canvas,
           placement.child,
-          level: placement.levelOverride ?? level,
+          level: placement.levelOverride ?? effectiveLevel,
           context: context.withDepth(context.depth + 1),
         );
         canvas.restore();
@@ -115,7 +120,7 @@ class DeviceRenderer {
       case DrawCapacitor():
         _renderCapacitor(canvas, node);
       case DrawTerminalAnchor():
-        _renderTerminalAnchor(canvas, node, instance);
+        _renderTerminalAnchor(canvas, node, instance, level);
       case DrawGroup():
         _renderGroup(canvas, node, params, instance, ctx, level);
       case DrawRepeat():
@@ -152,8 +157,7 @@ class DeviceRenderer {
     }
   }
 
-  void _renderCircle(
-      Canvas canvas, DrawCircle node, DeviceInstance instance) {
+  void _renderCircle(Canvas canvas, DrawCircle node, DeviceInstance instance) {
     Color fillColor;
     if (node.fillBinding != null) {
       fillColor = _resolveTerminalColor(node.fillBinding!, instance);
@@ -289,11 +293,12 @@ class DeviceRenderer {
     final platePaint = Paint()
       ..color = node.color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0 * node.scale  // slightly thicker for visual prominence
+      ..strokeWidth = 2.0 * node.scale // slightly thicker for visual prominence
       ..strokeCap = StrokeCap.butt;
 
     final plateLen = 9.0 * node.scale;
-    final gap = 4.0 * node.scale;     // larger gap → clearer separation from battery
+    final gap =
+        4.0 * node.scale; // larger gap → clearer separation from battery
     final stubLen = 10.0 * node.scale; // stubs longer than plates (convention)
     final cx = node.center.dx;
     final cy = node.center.dy;
@@ -327,11 +332,15 @@ class DeviceRenderer {
     Canvas canvas,
     DrawTerminalAnchor node,
     DeviceInstance instance,
+    DrawingLevel level,
   ) {
     final termDef = instance.definition.findTerminal(node.terminalDefId);
     if (termDef == null) return;
 
-    final anchor = termDef.anchorInConnector;
+    // Static per-level anchor. Delegation is intentionally not applied here:
+    // at exploded levels the referenced child draws its own terminal dot, so
+    // composite appearances simply omit facade anchor nodes at those levels.
+    final anchor = termDef.anchorForLevel(level);
 
     Color fillColor;
     if (node.colorBinding != null) {
@@ -521,8 +530,7 @@ class DeviceRenderer {
       final parts = cmd.trim().split(RegExp(r'\s+'));
       if (parts.isEmpty) continue;
       final op = parts[0].toUpperCase();
-      final nums =
-          parts.skip(1).map((s) => double.tryParse(s) ?? 0.0).toList();
+      final nums = parts.skip(1).map((s) => double.tryParse(s) ?? 0.0).toList();
 
       switch (op) {
         case 'M':
@@ -535,8 +543,7 @@ class DeviceRenderer {
           }
         case 'C':
           if (nums.length >= 6) {
-            path.cubicTo(
-                nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]);
+            path.cubicTo(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]);
           }
         case 'Z':
           path.close();

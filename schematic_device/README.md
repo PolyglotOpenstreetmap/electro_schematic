@@ -91,6 +91,66 @@ DrawDeviceRef(
 The renderer resolves `'sensor_block'` through `RenderContext.deviceResolver`
 and renders it inline, with cycle and depth guards.
 
+## Composite devices: combined vs exploded levels
+
+An assembly can render as **one combined symbol** at some drawing levels and
+**split into its component devices** at others. The convention is purely
+declarative:
+
+- A **combined** level is a `LevelAppearance` containing only plain drawables
+  (the assembly's glyph).
+- An **exploded** level is a `LevelAppearance` whose drawables include
+  `DrawDeviceRef`s to the component devices, plus plain `DrawLine`s for the
+  internal interconnect.
+
+`DeviceDefinition.isCompositeAt(level)` reports which kind a level is.
+
+### Facade terminals
+
+External terminals of the assembly need different geometry per level. Each
+`TerminalDef` supports:
+
+- `levelAnchors` — per-level static anchor overrides (e.g. the terminal's
+  position on the combined glyph), falling back to `anchorInConnector`;
+- `delegate: TerminalDelegate(refId, terminalId)` — at levels whose appearance
+  contains the `DrawDeviceRef` with that `id`, the terminal resolves to the
+  referenced child's terminal position (transformed through the ref's and any
+  enclosing `DrawGroup`s' offset/scale).
+
+```dart
+TerminalDef(
+  id: 'U',
+  label: 'U',
+  group: ElectricalGroup.power,
+  anchorInConnector: Offset(7.5, 0),                    // generic fallback
+  levelAnchors: {DrawingLevel.symbol: Offset(10, 0)},   // on the glyph
+  delegate: TerminalDelegate(refId: 'motor_ref_wire', terminalId: 'U1'),
+)
+```
+
+### Resolving wire endpoints
+
+`TerminalGeometry` answers "where is terminal X at level L" so wires attached
+to logical terminals re-anchor automatically when the level changes:
+
+```dart
+final p = TerminalGeometry.resolveForInstance(
+  instance, 'U', DrawingLevel.wire,
+  resolver: registry.lookup,
+);
+```
+
+### Per-instance override
+
+`DeviceInstance.forcedLevel` force-expands or force-collapses one placed
+instance regardless of the diagram's level: an instance with
+`forcedLevel: DrawingLevel.wire` on a symbol-level sheet renders its exploded
+wire appearance (and `TerminalGeometry` reports the matching delegated
+positions).
+
+See `example/lib/devices/motor_with_sensors_device.dart` for a complete
+assembly with facade terminals, delegation, and internal wiring.
+
 ## License
 
 GPLv3 — see the repository root [LICENSE](../LICENSE).

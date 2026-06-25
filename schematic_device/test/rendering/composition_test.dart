@@ -60,7 +60,8 @@ void main() {
       final sym = LevelAppearance(
         size: const Size(40, 40),
         drawables: const [
-          DrawCircle(center: Offset(20, 20), radius: 18, fillColor: Color(0xFFFFFFFF)),
+          DrawCircle(
+              center: Offset(20, 20), radius: 18, fillColor: Color(0xFFFFFFFF)),
         ],
       );
       final appearance = DeviceAppearance(symbol: sym);
@@ -327,7 +328,9 @@ void main() {
       );
     });
 
-    test('level inheritance: child inherits parent level when DrawDeviceRef.level is null', () {
+    test(
+        'level inheritance: child inherits parent level when DrawDeviceRef.level is null',
+        () {
       final childWithSymbol = _atomicDef(
         typeKey: 'child_sym',
         level: DrawingLevel.symbol,
@@ -448,7 +451,8 @@ void main() {
     test('instance-tree levelOverride is respected', () {
       // Parent renders at wire; child placement overrides to symbol.
       final parentDef = _atomicDef(typeKey: 'it_lvl_parent');
-      final childDef = _atomicDef(typeKey: 'it_lvl_child', level: DrawingLevel.symbol);
+      final childDef =
+          _atomicDef(typeKey: 'it_lvl_child', level: DrawingLevel.symbol);
 
       final instance = DeviceInstance(
         definition: parentDef,
@@ -542,7 +546,12 @@ void main() {
         typeKey: 'motor_with_sensors',
         name: 'Motor + sensors',
         parameters: const [
-          NumParamDef(id: 'sensorCount', label: 'Sensors', defaultValue: 1, min: 0, max: 4),
+          NumParamDef(
+              id: 'sensorCount',
+              label: 'Sensors',
+              defaultValue: 1,
+              min: 0,
+              max: 4),
           BoolParamDef(id: 'hasBrake', label: 'Brake', defaultValue: false),
           StringParamDef(id: 'motorRef', label: 'Ref', defaultValue: ''),
           NumParamDef(id: 'voltage', label: 'V', defaultValue: 400),
@@ -604,7 +613,8 @@ void main() {
       };
     });
 
-    test('sensorCount=2 renders motor + 2 sensors at wire level (no throw)', () {
+    test('sensorCount=2 renders motor + 2 sensors at wire level (no throw)',
+        () {
       final mwsDef = registry['motor_with_sensors']!;
       final instance = DeviceInstance(
         definition: mwsDef,
@@ -679,7 +689,8 @@ void main() {
   // ── Recursion guard ────────────────────────────────────────────────────────
 
   group('recursion guard', () {
-    test('self-referential DrawDeviceRef stops at maxDepth (no stack overflow)', () {
+    test('self-referential DrawDeviceRef stops at maxDepth (no stack overflow)',
+        () {
       // A device whose wire appearance references itself — must stop.
       const selfDef = DeviceDefinition(
         typeKey: 'self_ref',
@@ -792,6 +803,94 @@ void main() {
         ),
         returnsNormally,
       );
+    });
+
+    test(
+        'facade terminal resolves to motor anchor at wire level and to '
+        'static symbol anchor at symbol level (example geometry)', () {
+      // Mirrors example/lib/devices/motor_with_sensors_device.dart: the motor
+      // wire ref sits at (0,5) and the motor's U1 anchor at (7.5,8), so the
+      // facade U terminal lands at (7.5,13) when exploded.
+      const motorDef = DeviceDefinition(
+        typeKey: 'rotating_motor',
+        name: 'Motor',
+        connectors: [
+          ConnectorDef(
+            id: 'main',
+            name: 'Main',
+            placement: ConnectorPlacement.top,
+            terminals: [
+              TerminalDef(
+                id: 'U1',
+                label: 'U1',
+                group: ElectricalGroup.power,
+                anchorInConnector: Offset(7.5, 8),
+              ),
+            ],
+          ),
+        ],
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(size: Size(67.5, 60)),
+          symbol: LevelAppearance(size: Size(60, 80)),
+        ),
+      );
+      const composite = DeviceDefinition(
+        typeKey: 'motor_with_sensors',
+        name: 'Composite',
+        connectors: [
+          ConnectorDef(
+            id: 'supply',
+            name: 'Supply',
+            placement: ConnectorPlacement.top,
+            terminals: [
+              TerminalDef(
+                id: 'U',
+                label: 'U',
+                group: ElectricalGroup.power,
+                anchorInConnector: Offset(7.5, 0),
+                levelAnchors: {DrawingLevel.symbol: Offset(10, 0)},
+                delegate:
+                    TerminalDelegate(refId: 'motor_ref_wire', terminalId: 'U1'),
+              ),
+            ],
+          ),
+        ],
+        appearance: DeviceAppearance(
+          wire: LevelAppearance(
+            size: Size(310, 70),
+            drawables: [
+              DrawDeviceRef(
+                id: 'motor_ref_wire',
+                typeKey: 'rotating_motor',
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          symbol: LevelAppearance(size: Size(230, 80)),
+        ),
+      );
+      final reg = {motorDef.typeKey: motorDef, composite.typeKey: composite};
+
+      expect(
+        TerminalGeometry.resolve(
+          definition: composite,
+          terminalId: 'U',
+          level: DrawingLevel.wire,
+          resolver: (k) => reg[k],
+        ),
+        const Offset(7.5, 13),
+      );
+      expect(
+        TerminalGeometry.resolve(
+          definition: composite,
+          terminalId: 'U',
+          level: DrawingLevel.symbol,
+          resolver: (k) => reg[k],
+        ),
+        const Offset(10, 0),
+      );
+      expect(composite.isCompositeAt(DrawingLevel.wire), isTrue);
+      expect(composite.isCompositeAt(DrawingLevel.symbol), isFalse);
     });
   });
 }

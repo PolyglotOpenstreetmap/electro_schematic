@@ -29,7 +29,9 @@ abstract final class MotorWithSensorsDevice {
       name: 'Motor with sensors (composite)',
       description:
           'Composite: rotating motor + parameterised number of sensors '
-          '+ optional brake stub (brake device deferred).',
+          '+ optional brake stub (brake device deferred). Facade terminals '
+          'U/V/W delegate onto the embedded motor at wire level and use '
+          'static anchors on the combined glyph at symbol level.',
       parameters: const [
         NumParamDef(
           id: 'sensorCount',
@@ -57,12 +59,67 @@ abstract final class MotorWithSensorsDevice {
           max: 690,
         ),
       ],
-      connectors: const [], // composite exposes no terminals of its own here
+      // Facade terminals of the assembly. At the wire level (which contains
+      // the `motor_ref_wire` DrawDeviceRef) each terminal delegates onto the
+      // embedded motor's corresponding terminal; at the symbol level (no ref)
+      // the static `levelAnchors[symbol]` points on the combined glyph apply.
+      connectors: const [
+        ConnectorDef(
+          id: 'supply',
+          name: 'Supply',
+          placement: ConnectorPlacement.top,
+          terminals: [
+            TerminalDef(
+              id: 'U',
+              label: 'U',
+              group: ElectricalGroup.power,
+              anchorInConnector: Offset(7.5, 0),
+              levelAnchors: {DrawingLevel.symbol: Offset(10, 0)},
+              delegate: TerminalDelegate(
+                  refId: 'motor_ref_wire', terminalId: RotatingMotorDevice.u1),
+            ),
+            TerminalDef(
+              id: 'V',
+              label: 'V',
+              group: ElectricalGroup.power,
+              anchorInConnector: Offset(25, 0),
+              levelAnchors: {DrawingLevel.symbol: Offset(30, 0)},
+              delegate: TerminalDelegate(
+                  refId: 'motor_ref_wire', terminalId: RotatingMotorDevice.v1),
+            ),
+            TerminalDef(
+              id: 'W',
+              label: 'W',
+              group: ElectricalGroup.power,
+              anchorInConnector: Offset(42.5, 0),
+              levelAnchors: {DrawingLevel.symbol: Offset(50, 0)},
+              delegate: TerminalDelegate(
+                  refId: 'motor_ref_wire', terminalId: RotatingMotorDevice.w1),
+            ),
+          ],
+        ),
+      ],
       appearance: DeviceAppearance(
         wire: LevelAppearance(
           // Wide enough for motor + up to 4 sensors
           size: const Size(310, 70),
           drawables: [
+            // ── Internal interconnect: supply feed lines into U1/V1/W1 ─────
+            // (Plain drawables; the motor terminals sit at the ref offset
+            // (0,5) plus the motor's own anchors at y = 8 → y = 13.)
+            const DrawLine(
+                start: Offset(7.5, 0),
+                end: Offset(7.5, 13),
+                color: Color(0xFF795548)),
+            const DrawLine(
+                start: Offset(25, 0),
+                end: Offset(25, 13),
+                color: Color(0xFF000000)),
+            const DrawLine(
+                start: Offset(42.5, 0),
+                end: Offset(42.5, 13),
+                color: Color(0xFF9E9E9E)),
+
             // ── Motor terminal block ───────────────────────────────────────
             DrawDeviceRef(
               id: 'motor_ref_wire',

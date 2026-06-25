@@ -88,6 +88,14 @@ DrawableNode translateNode(DrawableNode node, Offset delta) {
         scale: node.scale,
       ),
     DrawRepeat() => node, // complex template — leave unchanged
-    DrawDeviceRef() => node, // position is encoded in offset field; leave to caller
+    DrawDeviceRef() => DrawDeviceRef(
+        id: node.id,
+        showIf: node.showIf,
+        typeKey: node.typeKey,
+        level: node.level,
+        offset: node.offset + delta,
+        scale: node.scale,
+        paramOverrides: node.paramOverrides,
+      ),
   };
 }

@@ -26,6 +26,8 @@ class NodePalette extends StatelessWidget {
     ('text', 'Text', Icons.text_fields),
     ('coil', 'Coil', Icons.waves),
     ('capacitor', 'Capacitor', Icons.battery_charging_full),
+    ('terminal', 'Terminal', Icons.adjust),
+    ('deviceRef', 'Device ref', Icons.widgets),
   ];
 
   @override
