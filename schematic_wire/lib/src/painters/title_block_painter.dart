@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/pagination.dart';
 import '../models/title_block_config.dart';
+import 'diagram_painter_utils.dart';
 
 /// Shared utility for drawing professional engineering drawing borders
 /// and title blocks on diagram pages.
@@ -233,6 +234,10 @@ class TitleBlockPainter {
 
   static void _drawSmallText(
       Canvas canvas, String text, Offset position, TextStyle style) {
+    if (canvas is TextCapturingCanvas) {
+      drawText(canvas, text, position, style);
+      return;
+    }
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,
@@ -244,6 +249,10 @@ class TitleBlockPainter {
 
   static void _drawCenteredText(
       Canvas canvas, String text, Offset position, TextStyle style) {
+    if (canvas is TextCapturingCanvas) {
+      drawTextCentered(canvas, text, position, style);
+      return;
+    }
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,
@@ -256,6 +265,10 @@ class TitleBlockPainter {
 
   static void _drawRightText(
       Canvas canvas, String text, Offset position, TextStyle style) {
+    if (canvas is TextCapturingCanvas) {
+      drawTextRight(canvas, text, position, style);
+      return;
+    }
     final textSpan = TextSpan(text: text, style: style);
     final textPainter = TextPainter(
       text: textSpan,
